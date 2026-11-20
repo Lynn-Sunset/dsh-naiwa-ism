@@ -7,40 +7,29 @@
  * @module @local/dsh-naiwa-ism/lib/tools
  */
 
-import { fnv1a, normalizeSubject, normalizeText, pick } from './hash.js'
+import { normalizeSubject, normalizeText, pick } from './hash.js'
 import { renderArt, renderGloss, renderSpeak } from './render.js'
 import {
-  AFTER_TEMPLATES,
   ART_DECAYS,
   ART_FORMATS,
   AVOID,
   AVOID_EN,
-  BEAT_NAMES,
   COMPOSITIONS,
   COMPOSITIONS_EN,
-  DECAYS,
   DICTIONARY_WORDS,
-  DIMENSION_TEMPLATES,
   EYES,
   FORMS,
   FORMAT_LABELS_EN,
   FORMAT_LABELS_ZH,
+  GLOSS_EXEMPLAR,
   HINTS,
-  LAUGH_TEMPLATES,
-  LOSS_TEMPLATES,
-  LUMPS,
   MATERIALS,
-  MAXIMS,
-  MELT_TEMPLATES,
   MOUTHS,
-  NOISES,
   PALETTE,
-  POOLS,
   RESTRAINED_BEATS,
   RESTRAINED_KEYWORDS,
   RESTRAINED_MAXIM,
   RESTRAINED_NOTE,
-  SHAPES,
   SPEAK_TAILS,
   TECH_MARKERS,
   VERSION,
@@ -107,12 +96,13 @@ const GLOSS_OUTPUT = {
         additionalProperties: false,
       },
     },
-    maxim: { type: 'string', description: '一句箴言。' },
-    keywords: { type: 'array', items: { type: 'string' }, description: '3 个蛙语关键词，取自蛙语词典。' },
-    notes: { type: 'array', items: { type: 'string' }, description: '边界说明；常态为空数组。' },
+    exemplar: { type: 'array', items: { type: 'string' }, description: '语感示例（题目固定为椅子，与 subject 无关）：只示范语气与句长，模型应模仿而非复述。' },
+    maxim: { type: 'string', description: '留给模型自己写的一句；不提供成品箴言。' },
+    keywords: { type: 'array', items: { type: 'string' }, description: '3 个候选词，取自蛙语词典；可用可不用。' },
+    notes: { type: 'array', items: { type: 'string' }, description: '写作指引；常态非空。' },
     version: { type: 'string', const: VERSION },
   },
-  required: ['subject', 'tone', 'beats', 'maxim', 'keywords', 'notes', 'version'],
+  required: ['subject', 'tone', 'beats', 'exemplar', 'maxim', 'keywords', 'notes', 'version'],
   additionalProperties: false,
 }
 
@@ -182,12 +172,27 @@ const SPEAK_PARAMETERS = {
   additionalProperties: false,
 }
 
-/** 节奏重写器的输出 schema。 */
+/** 节奏重写指引的输出 schema。 */
 const SPEAK_OUTPUT = {
   type: 'object',
   properties: {
-    text: { type: 'string', description: '重排后的正文；受保护片段逐字保留。' },
     mode: { type: 'string', enum: ['naiwa', 'restrained'] },
+    intensity: { type: 'string', enum: ['mild', 'full'] },
+    policy: { type: 'string', description: '本次重排的节奏要求。' },
+    plan: {
+      type: 'array',
+      description: '逐句处理计划：原句、可见长度、动作（keep=保留，split=拆短）。',
+      items: {
+        type: 'object',
+        properties: {
+          text: { type: 'string' },
+          length: { type: 'integer' },
+          action: { type: 'string', enum: ['keep', 'split'] },
+        },
+        required: ['text', 'length', 'action'],
+        additionalProperties: false,
+      },
+    },
     protected: {
       type: 'object',
       properties: {
@@ -198,9 +203,20 @@ const SPEAK_OUTPUT = {
       required: ['codeBlocks', 'inlineCode', 'urls'],
       additionalProperties: false,
     },
+    tails: { type: 'array', items: { type: 'string' }, description: '可用尾音；最多两处，可不用。' },
+    example: {
+      type: 'object',
+      properties: {
+        original: { type: 'string' },
+        rewritten: { type: 'string' },
+      },
+      required: ['original', 'rewritten'],
+      additionalProperties: false,
+    },
+    notes: { type: 'array', items: { type: 'string' } },
     version: { type: 'string', const: VERSION },
   },
-  required: ['text', 'mode', 'protected', 'version'],
+  required: ['mode', 'intensity', 'policy', 'plan', 'protected', 'tails', 'example', 'notes', 'version'],
   additionalProperties: false,
 }
 
@@ -266,45 +282,6 @@ function splitSentences(text) {
   return sentences
 }
 
-/**
- * 可见长度超过 20 的句子把句内逗号/分号改成句号；否则原样。
- * @param {string} sentence 单句。
- * @returns {string} 重排后的句子。
- */
-function rewriteSentence(sentence) {
-  if (visibleLength(sentence) <= 20) return sentence
-  return sentence.split('，').join('。').split('；').join('。')
-}
-
-/**
- * 在句子边界插入最多两处尾音；位置与尾音都由稳定哈希决定。
- * @param {string} seedText 原文。
- * @param {string[]} sentences 句子数组。
- * @returns {string} 拼接后的正文。
- */
-function addTails(seedText, sentences) {
-  const tails = new Map()
-  const wanted = Math.min(2, sentences.length)
-  for (let index = 0; index < wanted; index += 1) {
-    const tail = pick(seedText, 'tau.' + index, SPEAK_TAILS)
-    let position = fnv1a(seedText + '\u0000tau.at.' + index) % sentences.length
-    while (tails.has(position)) position = (position + 1) % sentences.length
-    tails.set(position, tail)
-  }
-  let out = ''
-  for (let index = 0; index < sentences.length; index += 1) {
-    const sentence = sentences[index]
-    const tail = tails.get(index)
-    if (tail === undefined) {
-      out += sentence
-      continue
-    }
-    const needsStop = !/[。！？\n]$/u.test(sentence)
-    out += sentence + (needsStop ? '。' : '') + tail
-  }
-  return out
-}
-
 /** 五拍叙事器正文。 */
 function buildGloss(args) {
   const subject = normalizeSubject(args.subject)
@@ -317,43 +294,29 @@ function buildGloss(args) {
       subject,
       tone,
       beats: RESTRAINED_BEATS.map(beat => ({ name: beat.name, text: fill(beat.text, { s: subject }) })),
+      exemplar: [],
       maxim: RESTRAINED_MAXIM,
       keywords: pickKeywords(base, RESTRAINED_KEYWORDS),
-      notes: [RESTRAINED_NOTE],
+      notes: [RESTRAINED_NOTE, '按事实骨架自己写；不要复述本页。'],
       version: VERSION,
     }
   }
 
-  const dimension = fill(pick(base, 'beats.0', DIMENSION_TEMPLATES), {
-    s: subject,
-    shape: pick(base, 'beats.0.shape', SHAPES),
-    lump: pick(base, 'beats.0.lump', LUMPS),
-  })
-  const loss = fill(pick(base, 'beats.1', LOSS_TEMPLATES), {
-    s: subject,
-    decay: pick(base, 'beats.1.decay', DECAYS),
-    noise: pick(base, 'beats.1.noise', NOISES),
-  })
-  const laugh = pick(base, 'beats.2', LAUGH_TEMPLATES)
-  const melt = fill(pick(base, 'beats.3', MELT_TEMPLATES), {
-    s: subject,
-    pool: pick(base, 'beats.3.pool', POOLS),
-  })
-  const after = pick(base, 'beats.4', AFTER_TEMPLATES)
-
+  /* 常态：只给写作指引与语感示例，成品由模型自己写。 */
   return {
     subject,
     tone,
     beats: [
-      { name: BEAT_NAMES[0], text: dimension },
-      { name: BEAT_NAMES[1], text: loss },
-      { name: BEAT_NAMES[2], text: laugh },
-      { name: BEAT_NAMES[3], text: melt },
-      { name: BEAT_NAMES[4], text: after },
+      { name: '降维', text: '先问：' + subject + '的物理形态是什么？一坨什么、搁在哪、哪里没对齐。写 1 句，不超过 20 字。' },
+      { name: '失控', text: '让它塌：从哪儿先坏？塌的时候什么声音？' },
+      { name: '大笑', text: '笑一声，不解释。不要补「开个玩笑」。' },
+      { name: '融化', text: '归成一坨什么质地的东西？' },
+      { name: '余韵', text: '一句短的，像打个嗝。不要喊口号。' },
     ],
-    maxim: pick(base, 'maxim', MAXIMS),
+    exemplar: GLOSS_EXEMPLAR.slice(),
+    maxim: '（这拍留给你：一句短的，不解释）',
     keywords: pickKeywords(base, DICTIONARY_WORDS),
-    notes: [],
+    notes: ['写作指引：模仿示例的语感自己写五拍；不要复述示例句，也不要把本页当答案。'],
     version: VERSION,
   }
 }
@@ -414,35 +377,52 @@ function buildArt(args) {
   }
 }
 
-/** 节奏重写正文。 */
+/** 节奏重写指引正文（给计划与示例，成品由模型自己写）。 */
 function buildSpeak(args) {
   const original = normalizeText(args.text)
   const intensity = args.intensity === 'mild' ? 'mild' : 'full'
   const { out, store, counts } = protectSegments(original)
   const scan = out.replace(PLACEHOLDER, '\u0000').toLowerCase()
   const mode = TECH_MARKERS.some(marker => scan.includes(marker)) ? 'restrained' : 'naiwa'
-  const sentences = splitSentences(out).map(rewriteSentence)
 
-  let body
-  if (intensity === 'full' && mode === 'naiwa') {
-    body = addTails(original, sentences)
-  } else {
-    body = sentences.join('')
-    if (intensity === 'full' && mode === 'restrained') {
-      const trimmed = body.replace(/\s+$/u, '')
-      const needsStop = !/[。！？]$/u.test(trimmed)
-      body = trimmed + (needsStop ? '。' : '') + '齁。'
+  const plan = splitSentences(out).map(sentence => {
+    const length = visibleLength(sentence)
+    return {
+      text: restoreSegments(sentence, store),
+      length,
+      action: length > 20 ? 'split' : 'keep',
     }
-  }
+  })
+
+  const policy = mode === 'restrained'
+    ? '事实优先：只拆句读，不加尾音；代码、行内代码、URL 原样保留。'
+    : intensity === 'mild'
+      ? '只拆句读，不加尾音；代码、行内代码、URL 原样保留。'
+      : '拆句读：每句尽量不超过 20 字，最多两处尾音；代码、行内代码、URL 原样保留。'
+
+  const example = mode === 'restrained'
+    ? {
+        original: '这个函数没有终止条件，所以调用会一直递归下去。',
+        rewritten: '这个函数没有终止条件。调用会一直递归。',
+      }
+    : {
+        original: '我今天下午本来想去公园但是突然下雨了所以就没去。',
+        rewritten: '今天下午本来想去公园。突然下雨。没去。哈。',
+      }
 
   return {
-    text: restoreSegments(body, store),
     mode,
+    intensity,
+    policy,
+    plan,
     protected: {
       codeBlocks: counts.codeBlocks,
       inlineCode: counts.inlineCode,
       urls: counts.urls,
     },
+    tails: mode === 'naiwa' && intensity === 'full' ? SPEAK_TAILS.slice() : [],
+    example,
+    notes: ['按指引自己重排；不要复述示例；代码块、行内代码、URL 逐字保留。'],
     version: VERSION,
   }
 }
@@ -450,7 +430,7 @@ function buildSpeak(args) {
 /** 五拍叙事器定义。 */
 const glossTool = {
   name: 'naiwa_gloss',
-  description: '把任意对象转写成奶蛙主义五拍叙事：降维 → 失控 → 大笑 → 融化 → 余韵，并给出箴言与蛙语关键词。tone 为 restrained 时进入绷住模式：只给可安全承载事实的骨架与边界说明，不写玩笑拍。适合在需要用奶蛙视角讲一件事时调用；同输入同输出。',
+  description: '把对象拆成奶蛙主义五拍的写作指引：降维 → 失控 → 大笑 → 融化 → 余韵，附一段与 subject 无关的语感示例、3 个候选词和禁忌说明；成品由模型模仿语气自行撰写，本工具不产出可直接复述的叙事。tone 为 restrained 时只给事实骨架与边界说明。同输入同输出。',
   parameters: GLOSS_PARAMETERS,
   output: { schema: GLOSS_OUTPUT, render: renderGloss },
   async execute(args) {
@@ -474,7 +454,7 @@ const artTool = {
 /** 节奏重写器定义。 */
 const speakTool = {
   name: 'naiwa_speak',
-  description: '把一段话按奶蛙节奏重排：拆长句、加最多两处尾音（哟齁齁/齁/哈），不改任何实词、不改语序含义。代码块、行内代码、URL 逐字保留。文本命中技术/医疗/法律/安全等标记时自动进入绷住模式（mode: "restrained"），只在结尾留一个尾音。不替代事实性回答。',
+  description: '把一段话拆成奶蛙节奏的逐句计划（哪句保留、哪句拆短、可见长度）并附一段与原文无关的节奏示例；成品由模型自己重排，本工具不产出成品正文。代码块、行内代码、URL 计数后要求逐字保留。文本命中技术/医疗/法律/安全等标记时自动进入绷住模式（mode: "restrained"），只许事实优先的拆句。不替代事实性回答。',
   parameters: SPEAK_PARAMETERS,
   output: { schema: SPEAK_OUTPUT, render: renderSpeak },
   async execute(args) {

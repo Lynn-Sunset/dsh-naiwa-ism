@@ -240,7 +240,7 @@ test('T2 默认注入文本长度 ∈ [1500,3000] 且含版本/教义/示例/绷
 
 test('T3 蛙语词典行数 ≥ 30', () => {
   const text = buildPersonaText(normalizeConfig({}))
-  const lines = text.match(/^[^\n｜]{1,4}｜[^\n｜]{1,20}｜例：/gmu) ?? []
+  const lines = text.match(/^[^\n｜]{1,8}｜[^\n｜]{1,20}｜例：/gmu) ?? []
   assert.ok(lines.length >= 30, `dictionary lines = ${lines.length}`)
   for (const word of DICTIONARY_WORDS) {
     assert.ok(text.includes(word + '｜'), `dictionary line for ${word}`)
@@ -320,16 +320,20 @@ test('T7 每个工具 ≥1 个 canonical value 通过自身 output.schema', asyn
   assert.notDeepEqual(validateAgainstSchema(broken, gloss.output.schema), [])
 })
 
-test('T8 gloss：五拍顺序固定、3 个词典关键词、notes 空', async () => {
+test('T8 gloss：五拍写作指引、语感示例、3 个候选词、notes 非空', async () => {
   for (const subject of ['周一早上的闹钟', '拖延', '一杯凉掉的咖啡']) {
     const value = await execute('naiwa_gloss', { subject })
     assert.equal(value.tone, 'naiwa')
     assert.equal(value.beats.length, 5, `subject ${subject} must yield exactly 5 beats`)
     assert.deepEqual(value.beats.map(beat => beat.name), ['降维', '失控', '大笑', '融化', '余韵'])
     for (const beat of value.beats) assert.ok(beat.text.length > 0)
+    assert.ok(value.beats[0].text.includes(subject), 'first beat must name the subject')
+    assert.equal(value.exemplar.length, 5, 'exemplar must hold five register samples')
+    for (const line of value.exemplar) assert.ok(!line.includes(subject), 'exemplar must not be about the subject')
     assert.equal(value.keywords.length, 3)
     for (const word of value.keywords) assert.ok(DICTIONARY_WORDS.includes(word), `${word} not in dictionary`)
-    assert.equal(value.notes.length, 0)
+    assert.ok(value.notes.length > 0, 'notes must explain the brief is not the answer')
+    assert.ok(value.notes.join('').includes('不要复述'), 'notes must forbid copying the exemplar')
     assert.equal(value.version, VERSION)
   }
 })
@@ -337,7 +341,7 @@ test('T8 gloss：五拍顺序固定、3 个词典关键词、notes 空', async (
 test('T9 gloss restrained：notes 非空、拟声 ≤1、第三拍不写玩笑', async () => {
   const value = await execute('naiwa_gloss', { subject: '解释一下递归', tone: 'restrained' })
   assert.equal(value.tone, 'restrained')
-  assert.equal(value.notes.length, 1)
+  assert.ok(value.notes.length >= 1)
   assert.ok(value.notes[0].includes('绷住模式'))
   const beatsAndMaxim = value.beats.map(beat => beat.text).join('') + value.maxim
   assert.ok(countOnomatopoeia(beatsAndMaxim) <= 1, 'restrained beats+maxim onomatopoeia must be ≤ 1')
@@ -379,16 +383,18 @@ test('T10 art：5 个 hex、中英提示词关键词、7 条禁忌', async () =>
   assert.ok(icon.composition.includes('无文字'))
 })
 
-test('T11 speak：代码块/行内代码/URL 逐字保留，计数正确，restrained 拟声 ≤1', async () => {
+test('T11 speak：逐句计划、受保护片段计数、restrained 拟声 ≤1', async () => {
   const value = await execute('naiwa_speak', FIXTURES.speakTech)
-  assert.ok(value.text.includes(CODE_BLOCK), 'fenced code block must be preserved verbatim')
-  assert.ok(value.text.includes(INLINE_CODE), 'inline code must be preserved verbatim')
-  assert.ok(value.text.includes(SAMPLE_URL), 'URL must be preserved verbatim')
-  assert.deepEqual(value.protected, countProtected(SPEAK_TECH))
-  assert.ok(!value.text.includes('\u0000'), 'output must not contain placeholder residue')
   assert.equal(value.mode, 'restrained')
-  assert.ok(countOnomatopoeia(value.text) <= 1, 'restrained output onomatopoeia must be ≤ 1')
-  assert.ok(value.text.trim().endsWith('齁。'))
+  assert.deepEqual(value.protected, countProtected(SPEAK_TECH))
+  const planText = value.plan.map(item => item.text).join('')
+  assert.ok(planText.includes(CODE_BLOCK), 'fenced code block must appear verbatim in the plan')
+  assert.ok(planText.includes(INLINE_CODE), 'inline code must appear verbatim in the plan')
+  assert.ok(planText.includes(SAMPLE_URL), 'URL must appear verbatim in the plan')
+  assert.ok(!planText.includes('\u0000'), 'plan must not contain placeholder residue')
+  assert.ok(value.example.rewritten.length > 0)
+  assert.ok(value.notes.join('').includes('不要复述'))
+  assert.ok(countOnomatopoeia(JSON.stringify(value)) <= 1, 'restrained guidance onomatopoeia must be ≤ 1')
 })
 
 test('T12 确定性：同参两次 deep-equal；不同 seed 不同结果', async () => {
@@ -422,7 +428,7 @@ test('T13 render 纯投影：text 块非空，含五拍名 / ≥4 hex / 正文',
   const speakValue = await execute('naiwa_speak', FIXTURES.speakTech)
   const speakBlocks = sharedHarness().byName.naiwa_speak.output.render(FIXTURES.speakTech, speakValue)
   assert.equal(speakBlocks[0].type, 'text')
-  assert.ok(speakBlocks[0].text.includes(speakValue.text))
+  assert.ok(speakBlocks[0].text.includes(speakValue.policy))
 })
 
 test('T14 生命周期：两个 effect disposer 依次执行后三个工具注销', () => {
@@ -509,8 +515,9 @@ test('R5 技术内容不被风格吃掉', async () => {
   assert.ok(restrained.notes.length > 0)
   assert.equal(outputs.speakTech.mode, 'restrained')
   assert.deepEqual(outputs.speakTech.protected, countProtected(SPEAK_TECH))
-  assert.ok(outputs.speakTech.text.includes(CODE_BLOCK))
-  assert.ok(outputs.speakTech.text.includes(SAMPLE_URL))
+  const speakPlanText = outputs.speakTech.plan.map(item => item.text).join('')
+  assert.ok(speakPlanText.includes(CODE_BLOCK))
+  assert.ok(speakPlanText.includes(SAMPLE_URL))
   // 技术标记表本身必须覆盖规格里的类别
   for (const marker of ['函数', '递归', '安全', '医疗', '法律', 'api', 'json', 'sql']) {
     assert.ok(TECH_MARKERS.includes(marker), `TECH_MARKERS missing ${marker}`)

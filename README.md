@@ -15,7 +15,7 @@
    {"action": "install_bundle", "target": "D:/Projects/dsh-naiwa-ism/plugin"}
    ```
 
-3. 刷新 Harness Web 页面，在会话中输入 `/naiwa status` 检查当前配置。
+3. 如果插件管理器返回 `restart-required`，先重启 Harness。刷新 Harness Web 页面，在会话中输入 `/naiwa status` 检查当前配置。
 
 ## 使用
 
@@ -24,9 +24,9 @@
 | `/naiwa strength naiwa` | 启用奶蛙人格 |
 | `/naiwa strength off` | 关闭人格，保留工具 |
 | `/naiwa language zh` | 将回答语言设为中文 |
-| `naiwa_gloss` | 把主题拆成五拍叙事 |
+| `naiwa_gloss` | 提供五拍写作指引和独立的语感示例，由模型据此写作 |
 | `naiwa_art` | 生成配色、美术指导和中英绘图提示词 |
-| `naiwa_speak` | 调整句读和尾音，保留代码与网址 |
+| `naiwa_speak` | 提供逐句节奏计划和示例，标记需要保留的代码与网址 |
 
 完整命令和配置工具参数见[插件手册](plugin/README.md)。公开版自带双表情插画和四段合成提示音，运行时可离线使用。
 

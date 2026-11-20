@@ -13,14 +13,16 @@
  */
 export function renderGloss(args, value) {
   const lines = [value.version + '｜' + value.subject + '｜' + value.tone]
+  lines.push('备注：' + value.notes.join('；'))
   value.beats.forEach((beat, index) => {
     lines.push((index + 1) + '. ' + beat.name + '：' + beat.text)
   })
-  lines.push('箴言：' + value.maxim)
-  lines.push('关键词：' + value.keywords.join(' / '))
-  if (value.notes.length > 0) {
-    lines.push('边界：' + value.notes.join('；'))
+  if (Array.isArray(value.exemplar) && value.exemplar.length > 0) {
+    lines.push('语感示例（题目不同，只学语气，勿复述）：')
+    for (const line of value.exemplar) lines.push('· ' + line)
   }
+  lines.push('箴言：' + value.maxim)
+  lines.push('候选词：' + value.keywords.join(' / '))
   return [{ type: 'text', text: lines.join('\n') }]
 }
 
@@ -50,11 +52,25 @@ export function renderArt(args, value) {
 }
 
 /**
- * 节奏重写 → 文本块（直接给重排后的正文，不附加说明）。
+ * 节奏重写指引 → 文本块。
  * @param {unknown} args 调用参数（仅用于签名对齐）。
  * @param {object} value canonical value。
  * @returns {{ type: 'text', text: string }[]} 内容块。
  */
 export function renderSpeak(args, value) {
-  return [{ type: 'text', text: value.text }]
+  const actionLabels = { keep: '保留', split: '拆短' }
+  const lines = [value.version + '｜节奏重排指引｜' + value.mode + '｜' + value.intensity]
+  lines.push('做法：' + value.policy)
+  lines.push('逐句计划：')
+  value.plan.forEach((item, index) => {
+    lines.push((index + 1) + '. [' + (actionLabels[item.action] ?? item.action) + '] ' + item.text + '（可见长度 ' + item.length + '）')
+  })
+  if (value.tails.length > 0) {
+    lines.push('可用尾音（最多两处，可不用）：' + value.tails.join(' / '))
+  }
+  lines.push('语感示例（题目不同，只学节奏，勿复述）：')
+  lines.push('原句：' + value.example.original)
+  lines.push('重排：' + value.example.rewritten)
+  lines.push('备注：' + value.notes.join('；'))
+  return [{ type: 'text', text: lines.join('\n') }]
 }
