@@ -1,0 +1,8 @@
+- insert:
+    - id: naiwa-ism
+      name: '@local/dsh-naiwa-ism'
+      config:
+        strength: naiwa
+        resident: true
+        language: auto
+        spell: ''
