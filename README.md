@@ -2,7 +2,9 @@
 
 一个给 DeepSeek Harness 会话加上奶蛙口吻的插件。它提供叙事、美术提示词和语言节奏三个工具，也可以在 Web 面板里切换人格、语言、皮肤与回合结束提示音。
 
-![奶蛙的两种表情](plugin/docs/preview.svg)
+<img src="https://img.huxiucdn.com/article/content/26-10-01/b77be68a-cb89-49cc-be30-dd123f34f5fe.png?imageView2/2/w/700/format/jpeg" alt="竹林前披着透明雨衣的奶蛙立牌" width="360">
+
+图片出处：[《流动奶蛙，大学最好的招生简章》](https://m.huxiu.com/article/4895021.html)。
 
 ## 安装
 
