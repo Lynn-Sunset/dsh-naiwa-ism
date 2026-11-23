@@ -95,7 +95,7 @@ function countProtected(text) {
 test('F1 package.json / locale 可解析；exports 完整；无依赖与 engines', async () => {
   const pkg = await readJson('package.json')
   assert.equal(pkg.name, '@local/dsh-naiwa-ism')
-  assert.equal(pkg.version, '1.2.0')
+  assert.equal(pkg.version, '1.2.1')
   assert.equal(pkg.type, 'module')
   for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'engines']) {
     assert.equal(pkg[field], undefined, `package.json must not declare ${field}`)
@@ -105,7 +105,7 @@ test('F1 package.json / locale 可解析；exports 完整；无依赖与 engines
   // bundle patch 与 client 声明（更强，不是放宽）；spec §7.4 漏算了这一行。
   assert.deepEqual(pkg.dsh, {
     bundle: { patch: './cordis.patch.yml' },
-    client: { platform: 'web', immediately: true, inject: ['@deepseek-ai/dsh-client-ui-conversation'] },
+    client: { platform: 'web', immediately: true, inject: ['@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-session-controller', '@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-conversation', '@deepseek-ai/dsh-client-ui-renderer'] },
   })
   assert.ok(await exists('cordis.patch.yml'))
   for (const key of ['.', './locale/*.json', './icon', './package.json']) {

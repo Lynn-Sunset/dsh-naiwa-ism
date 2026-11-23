@@ -11,9 +11,7 @@
  * 本文件只做控制类动作：不发网络请求、不读写别的插件 DOM、不在挂载时发命令。
  */
 
-const loader = globalThis.window && globalThis.window.__ModuleLoader__
-
-if (loader) {
+if (globalThis.window && globalThis.window.__ModuleLoader__) {
   globalThis.window.__ModuleLoader__.load({
     id: '@local/dsh-naiwa-ism',
     factory(require) {
@@ -477,7 +475,7 @@ if (loader) {
           return props.watchEnd(function () {
             if (soundOn === true) playLaugh()
           })
-        }, [soundOn])
+        }, [soundOn, props.watchEnd])
 
         React.useEffect(function () {
           if (bridge === undefined || bridge === null || typeof bridge.subscribe !== 'function') return undefined

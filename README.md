@@ -6,6 +6,10 @@
 
 图片出处：[《流动奶蛙，大学最好的招生简章》](https://m.huxiu.com/article/4895021.html)。
 
+## 宿主版本
+
+适配 DeepSeek Harness 默认渠道 `0.2.2-rc.5` 和预览渠道 `0.2.3-alpha.2`。使用 npm 或源码运行 alpha 版时，宿主要求 Node.js `^24.22.3 || >=26.13.1`；桌面版自带运行时。
+
 ## 安装
 
 1. 下载并解压此仓库，或运行 `git clone https://github.com/Lynn-Sunset/dsh-naiwa-ism.git`。

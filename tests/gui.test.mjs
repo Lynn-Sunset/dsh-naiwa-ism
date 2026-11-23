@@ -9,6 +9,7 @@
  */
 
 import test from 'node:test'
+import { createContext, runInContext } from 'node:vm'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -128,6 +129,15 @@ test('G1 client.js 可被 fake loader 加载，factory 返回 { inject, apply }'
   assert.equal(typeof plugin.apply, 'function')
 })
 
+test('the Web bundle registers on both initial load and same-page reload', () => {
+  const loaded = []
+  const context = createContext({ window: { __ModuleLoader__: { load: spec => loaded.push(spec.id) } } })
+  const script = read('client.js')
+  runInContext(script, context)
+  runInContext(script, context)
+  assert.deepEqual(loaded, ['@local/dsh-naiwa-ism', '@local/dsh-naiwa-ism'])
+})
+
 test('G2 apply 注册 conversation.input.dock：name/id/order/locale/inject 齐全', () => {
   const plugin = makePlugin()
   const harness = fakeClientCtx()
@@ -203,7 +213,7 @@ test('G6 package.json 的 dsh.client/exports/files 与磁盘一致', () => {
   const pkg = JSON.parse(read('package.json'))
   assert.equal(pkg.dsh.client.platform, 'web')
   assert.equal(pkg.dsh.client.immediately, true)
-  assert.deepEqual(pkg.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-conversation'])
+  assert.deepEqual(pkg.dsh.client.inject, ['@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-session-controller', '@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-conversation', '@deepseek-ai/dsh-client-ui-renderer'])
   assert.equal(pkg.exports['./client'], './client.js')
   assert.ok(existsSync(join(PLUGIN, 'client.js')), 'client.js must exist on disk')
   assert.ok(existsSync(join(PLUGIN, pkg.exports['./client'])))

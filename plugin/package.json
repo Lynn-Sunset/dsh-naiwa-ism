@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-naiwa-ism",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "description": "Naiwa-ism persona, narrative and art-direction tools for DeepSeek Harness, with a Web GUI control bar.",
   "type": "module",
@@ -27,7 +27,13 @@
     "client": {
       "platform": "web",
       "immediately": true,
-      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
     }
   }
 }
