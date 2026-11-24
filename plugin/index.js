@@ -1,3 +1,4 @@
+import { petChatCommand } from './lib/pet-chat.js'
 /**
  * 奶蛙主义 Host bundle 入口：人格段落 + 三工具 + 控制面（/naiwa 命令 + 第四工具 naiwa_config）。
  *
@@ -79,4 +80,5 @@ export function apply(ctx, config) {
   }, 'naiwa-ism:tools')
 
   ctx.effect(() => ctx.commands.register(buildNaiwaCommand(control)), 'naiwa-ism:command')
+  ctx.effect(() => ctx.commands.register(petChatCommand(ctx)), 'naiwa-ism:pet-chat')
 }

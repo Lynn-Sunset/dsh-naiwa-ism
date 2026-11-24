@@ -110,7 +110,7 @@ test('C1 apply 装配：section / 四工具 / 命令 / 三个 effect', () => {
     ['naiwa_art', 'naiwa_config', 'naiwa_gloss', 'naiwa_speak'],
   )
 
-  assert.equal(harness.commands.length, 1)
+  assert.deepEqual(harness.commands.map(command => command.name), ['naiwa', 'naiwa-chat'])
   const command = harness.commands[0]
   assert.equal(command.name, 'naiwa')
   assert.equal(typeof command.description, 'string')
@@ -122,6 +122,7 @@ test('C1 apply 装配：section / 四工具 / 命令 / 三个 effect', () => {
     'naiwa-ism:persona',
     'naiwa-ism:tools',
     'naiwa-ism:command',
+    'naiwa-ism:pet-chat',
   ])
 })
 
@@ -255,7 +256,7 @@ test('C7 重载恢复：二次 apply 从状态文件读回 off，section 不注�
   apply(second.ctx, { stateFile: file })
   assert.equal(second.sections.length, 0, 'off must persist across reload')
   assert.equal(second.tools.length, 4)
-  assert.equal(second.commands.length, 1)
+  assert.equal(second.commands.length, 2)
 
   const status = invoke(second.commands[0], ' status')
   assert.ok(status.text.includes('档位=关闭'), status.text)
@@ -339,7 +340,7 @@ test('C11 常驻开关：off 撤 section 但保留四工具与命令，on 再注
   assert.equal(off.kind, 'success')
   assert.equal(harness.sections.length, 0)
   assert.equal(harness.tools.length, 4)
-  assert.equal(harness.commands.length, 1)
+  assert.deepEqual(harness.commands.map(command => command.name), ['naiwa', 'naiwa-chat'])
 
   const on = invoke(command, ' resident on')
   assert.equal(on.kind, 'success')
@@ -374,7 +375,7 @@ test('C13 卸载：三个 effect disposer 后四工具注销、命令与 section
   const file = tempStateFile()
   const harness = fakeHostCtx()
   apply(harness.ctx, { stateFile: file })
-  assert.equal(harness.effects.length, 3)
+  assert.equal(harness.effects.length, 4)
   for (const effect of harness.effects) effect.dispose()
   assert.equal(harness.sections.length, 0)
   assert.equal(harness.commands.length, 0)

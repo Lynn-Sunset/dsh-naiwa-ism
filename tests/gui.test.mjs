@@ -9,6 +9,7 @@
  */
 
 import test from 'node:test'
+import { createHash } from 'node:crypto'
 import { createContext, runInContext } from 'node:vm'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
@@ -183,6 +184,10 @@ test('G4 send 失败四态归一化（host 错误 / value undefined / kind:error
   assert.equal(unknown.ok, false)
   assert.ok(unknown.text.includes('unknown or malformed command'), unknown.text)
   assert.ok(unknown.text.includes('/naiwa status'))
+  const missingChat = await props.send('/naiwa-chat ' + JSON.stringify({mode: 'chat', question: '你今天开心吗'}))
+  assert.equal(missingChat.ok, false)
+  assert.match(missingChat.text, /重启 DeepSeek Harness/)
+  assert.doesNotMatch(missingChat.text, /你今天开心吗/)
 
   harness.setResult({ ok: true, value: { commandId: 'c2', result: { kind: 'error', text: '参数不合法：档位只能是 …' } } })
   assert.deepEqual(await props.send('/naiwa strength turbo'), { ok: false, text: '参数不合法：档位只能是 …' })
@@ -302,4 +307,130 @@ test('G8 locale 字典 zh/en 键集一致，NS 为 naiwa-ism', () => {
   for (const key of ['strength.off', 'strength.naiwa', 'resident.on', 'resident.off', 'language.auto', 'language.zh', 'language.en', 'sync']) {
     assert.ok(zhKeys.includes(key), `dictionary missing ${key}`)
   }
+})
+test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭和卸载时清理', async () => {
+  const settings = new Map()
+  const node = () => ({
+    children: [],
+    focus() {},
+    append(...children) { children.forEach(child => this.appendChild(child)) },
+    replaceChildren(...children) { this.children = []; this.append(...children) },
+    attrs: new Map(),
+    setAttribute(k,v) { this.attrs.set(k,v) },
+    removeAttribute(k) { this.attrs.delete(k) },
+    style: { setProperty() {} },
+    getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    setPointerCapture() {},
+    animate() { return this.clock = { cancel() {} } },
+    appendChild(child) { child.parent = this; this.children.push(child) },
+    get firstChild() { return this.children[0] },
+    get lastChild() { return this.children.at(-1) },
+    remove() { this.parent.children = this.parent.children.filter(child => child !== this) },
+  })
+  const doc = { head: node(), body: node(), createElement: node }
+  const backgroundChanges = []
+  doc.body.classList = {
+    add: name => backgroundChanges.push(name),
+    remove: name => backgroundChanges.push(name),
+  }
+  const played = []
+  let bundle, component, dispose
+  const questions = []
+  const react = {
+    ...fakeReact,
+    useSyncExternalStore: (_subscribe, snapshot) => snapshot(),
+    useEffect(fn) { fn() },
+    useState: initial => [initial === false ? true : typeof initial === 'function' ? initial() : initial, () => {}],
+  }
+  const context = createContext({
+    document: doc,
+    Audio: class {
+      constructor(src) { this.src = src }
+      play() { played.push(this.src); return Promise.resolve() }
+      pause() {}
+    },
+    localStorage: { getItem: key => settings.get(key), setItem: (key, value) => settings.set(key, value) },
+    window: { __ModuleLoader__: { load: spec => { bundle = spec } } },
+  })
+  runInContext(read('client.js'), context)
+  function install() {
+    const harness = fakeClientCtx()
+    harness.ctx.effect = (fn, name) => { const undo = fn(); if (name === 'naiwa-ism:pet') dispose = undo }
+    bundle.factory(() => react).apply(harness.ctx)
+    harness.slots.declare()
+    component = harness.slots.registrations[0].component
+  }
+  function select(mode) {
+    const rendered = component({ t: key => key, sessionId: 'demo', send: async line => {
+      questions.push(JSON.parse(line.slice('/naiwa-chat '.length)))
+      return {ok: true, text: '我在呢。'}
+    } })
+    const row = rendered.children[1].children.find(child => child?.props.key === 'pet')
+    row.children.find(child => child.props.key === mode).props.onClick()
+  }
+  install()
+  assert.equal(doc.body.children.length, 0)
+  const animations = new Set()
+  for (const mode of ['cycle', 'ballet', 'laugh', 'hop']) {
+    select(mode)
+    assert.equal(doc.body.children.length, 1)
+    assert.equal(doc.head.children.length, 1)
+    const picture = doc.body.firstChild.firstChild
+    const bytes = Buffer.from(picture.firstChild.srcset.split(',')[1], 'base64')
+    assert.ok(bytes.includes(Buffer.from('ANMF')))
+    assert.equal(picture.firstChild.media, '(prefers-reduced-motion: no-preference)')
+    assert.ok(!Buffer.from(picture.lastChild.src.split(',')[1], 'base64').includes(Buffer.from('ANMF')))
+    animations.add(picture.firstChild.srcset)
+    assert.equal(settings.get('naiwa-ism:pet'), mode)
+  }
+  assert.equal(animations.size, 4)
+  const last = doc.body.firstChild.firstChild.firstChild.srcset
+  const pet = doc.body.firstChild
+  const pointer = { button: 0, isPrimary: true, pointerId: 1, clientX: 10, clientY: 12 }
+  pet.onpointerdown(pointer)
+  pet.onpointermove({ ...pointer, clientX: 41 })
+  pet.onpointerup(pointer)
+  pet.onclick({ detail: 1 })
+  assert.equal(pet.attrs.has('data-placed'), true)
+  assert.equal(pet.attrs.has('data-reacting'), false)
+  assert.equal(played.length, 0, 'dragging is silent')
+  pet.onpointerdown(pointer)
+  pet.onpointerup(pointer)
+  pet.onclick({ detail: 1 })
+  const box = doc.body.children[1]
+  const [, , log, form] = box.children
+  const [input, actions] = form.children
+  assert.match(log.firstChild.textContent, /想跟我聊/)
+  assert.deepEqual(questions, [])
+  input.value = '你好'
+  input.oninput()
+  form.onsubmit({ preventDefault() {} })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(log.lastChild.textContent, '奶蛙：我在呢。')
+  assert.deepEqual(questions[0], {mode:'chat', question:'你好'})
+  actions.firstChild.onclick()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(questions[1].mode, 'progress')
+  assert.equal(pet.attrs.has('data-reacting'), true)
+  assert.notEqual(pet.firstChild.firstChild.srcset, last)
+  assert.equal(settings.get('naiwa-ism:pet'), 'hop')
+  pet.firstChild.clock.onfinish()
+  assert.equal(pet.firstChild.firstChild.srcset, last)
+  pet.onclick({ detail: 0 })
+  select('cycle')
+  assert.equal(pet.firstChild.clock.onfinish, null)
+  assert.equal(pet.attrs.has('data-placed'), false)
+  select('hop')
+  dispose()
+  assert.equal(doc.body.children.length, 0)
+  install()
+  assert.equal(doc.body.firstChild.firstChild.firstChild.srcset, last)
+  select('off')
+  assert.equal(doc.body.children.length, 0)
+  assert.equal(doc.head.children.length, 0)
+  assert.deepEqual(backgroundChanges, [], 'pet interaction must leave the backdrop alone')
+  assert.equal(played.length, 2)
+  assert.equal(played[0], played[1])
+  const wave = Buffer.from(played[0].split(',')[1], 'base64')
+  assert.equal(createHash('sha256').update(wave).digest('hex'), 'd046f1f8b4a351c5c860e5a2a2090cb50e3686b60744db1b09801166f4c6fe22')
 })

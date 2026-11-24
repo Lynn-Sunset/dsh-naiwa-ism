@@ -2,9 +2,9 @@
 
 一个给 DeepSeek Harness 会话加上奶蛙口吻的插件。它提供叙事、美术提示词和语言节奏三个工具，也可以在 Web 面板里切换人格、语言、皮肤与回合结束提示音。
 
-<img src="https://img.huxiucdn.com/article/content/26-10-01/b77be68a-cb89-49cc-be30-dd123f34f5fe.png?imageView2/2/w/700/format/jpeg" alt="竹林前披着透明雨衣的奶蛙立牌" width="360">
+<img src="./assets/naiwa.png" alt="奶蛙桌宠从抱着肚子站立到仰头大笑的三个画面" width="720">
 
-图片出处：[《流动奶蛙，大学最好的招生简章》](https://m.huxiu.com/article/4895021.html)。
+预览图来自 [tzshuai07 的奶蛙桌宠](https://github.com/tzshuai07/naiwa/blob/main/docs/preview.png)，随图附上[上游 MIT 许可证](./assets/naiwa-LICENSE.txt)。
 
 ## 宿主版本
 
@@ -32,7 +32,9 @@
 | `naiwa_art` | 生成配色、美术指导和中英绘图提示词 |
 | `naiwa_speak` | 提供逐句节奏计划和示例，标记需要保留的代码与网址 |
 
-完整命令和配置工具参数见[插件手册](plugin/README.md)。公开版自带双表情插画和四段合成提示音，运行时可离线使用。
+在「奶蛙」面板开启桌宠，可选择骑车、芭蕾、蹦跳或捧腹大笑。轻点桌宠，它会笑出声并打开聊天气泡。闲聊和「看进度」使用当前会话的 DeepSeek 模型，需要连接模型服务。聊天记录按会话保存在本机，重启 Harness 后可以继续。
+
+桌宠动作、背景插画和回合完成提示音均可离线使用。完整命令和配置见[插件手册](plugin/README.md)。
 
 ## 验证
 

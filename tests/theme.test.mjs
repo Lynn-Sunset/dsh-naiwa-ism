@@ -42,12 +42,13 @@ globalThis.window = {
 /** 可注入的 localStorage：记录读写次数，可按用例抛错。 */
 function makeStorage(initial, behavior) {
   const map = new Map(Object.entries(initial === undefined ? {} : initial))
-  const calls = { get: 0, set: 0 }
+  const calls = { get: 0, set: 0, readKeys: [] }
   const options = behavior === undefined ? {} : behavior
   return {
     map,
     calls,
     getItem(key) {
+      calls.readKeys.push(key)
       calls.get += 1
       if (options.throwGet === true) throw new Error('storage get denied')
       return map.has(key) ? map.get(key) : null
@@ -374,7 +375,7 @@ test('T6 四类降级不抛（C3′/C6）：无 get/inject、无 theme、overrid
     }
     const plugin = makePlugin()
     assert.doesNotThrow(() => plugin.apply(bare))
-    assert.equal(storage.calls.get, 0, 'no theme attach => no storage read')
+    assert.deepEqual(storage.calls.readKeys, ['naiwa-ism:pet'], 'only the independent pet setting is read')
     assert.equal(storage.calls.set, 0, 'no theme attach => no storage write')
     assert.equal(plugin.themeModel.bridge.available, false, 'chip must stay hidden without theme service')
     assert.equal(plugin.themeModel.skin.on, false)

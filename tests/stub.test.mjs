@@ -434,8 +434,8 @@ test('T13 render 纯投影：text 块非空，含五拍名 / ≥4 hex / 正文',
 test('T14 生命周期：两个 effect disposer 依次执行后三个工具注销', () => {
   const harness = fakeCtx()
   apply(harness.ctx, isolatedConfig({}))
-  assert.equal(harness.effects.length, 3) // B3/B4 强制：命令必须独立 effect 才随插件卸载
-  assert.deepEqual(harness.effects.map(effect => effect.label), ['naiwa-ism:persona', 'naiwa-ism:tools', 'naiwa-ism:command']) // B3/B4 强制：命令 effect
+  assert.equal(harness.effects.length, 4) // B3/B4 强制：命令必须独立 effect 才随插件卸载
+  assert.deepEqual(harness.effects.map(effect => effect.label), ['naiwa-ism:persona', 'naiwa-ism:tools', 'naiwa-ism:command', 'naiwa-ism:pet-chat']) // B3/B4 强制：命令 effect
   harness.effects[0].dispose()
   harness.effects[1].dispose()
   assert.equal(harness.unregistered.size, 4) // B3 强制：第四工具 naiwa_config

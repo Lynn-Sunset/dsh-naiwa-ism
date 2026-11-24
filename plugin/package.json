@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-naiwa-ism",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "private": true,
   "description": "Naiwa-ism persona, narrative and art-direction tools for DeepSeek Harness, with a Web GUI control bar.",
   "type": "module",
