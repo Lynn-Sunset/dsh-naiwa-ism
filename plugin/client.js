@@ -21,7 +21,7 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
       const NS = 'naiwa-ism'
       const SLOT = 'conversation.input.dock'
       const CACHE_KEY = 'naiwa-ism:state'
-      const STRENGTHS = ['off', 'naiwa']
+      const STRENGTHS = ['off', 'naiwa', 'nailoong']
       const LANGUAGES = ['auto', 'zh', 'en']
       const DEFAULT_VIEW = { strength: 'naiwa', resident: true, language: 'auto', spell: '' }
 
@@ -57,6 +57,7 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           name: '奶蛙',
           'strength.off': '关闭',
           'strength.naiwa': '奶蛙',
+          'strength.nailoong': '奶龙',
           'resident.on': '常驻：开',
           'resident.off': '常驻：关',
           'language.auto': '跟随',
@@ -70,12 +71,12 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           'status.pending': '同步中…',
           'status.failed': '失败',
           'aria.group': '奶蛙控制条',
-          'title.strength': '档位：关闭=不注入人格；奶蛙=默认注入。改完下一轮生效',
+          'title.strength': '选择主对话人格，下一轮生效',
           'title.resident': '常驻：关掉后本 profile 不再注入人格段落',
           'title.language': '回答语言',
           'title.skin': '皮肤：奶蛙配色；深色外观下自动使用奶蛙夜配色',
           'title.sync': '读取 Host 当前设置',
-          'label.strength': '档位',
+          'label.strength': '人格',
           'label.resident': '常驻',
           'label.language': '语言',
           'label.skin': '皮肤',
@@ -94,6 +95,7 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           name: 'Naiwa',
           'strength.off': 'Off',
           'strength.naiwa': 'Naiwa',
+          'strength.nailoong': 'Nailoong',
           'resident.on': 'Resident: on',
           'resident.off': 'Resident: off',
           'language.auto': 'Auto',
@@ -112,7 +114,7 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           'title.language': 'Answer language',
           'title.skin': 'Skin: naiwa palette; dark appearance uses the naiwa night palette',
           'title.sync': 'Read the Host settings',
-          'label.strength': 'Strength',
+          'label.strength': 'Persona',
           'label.resident': 'Resident',
           'label.language': 'Language',
           'label.skin': 'Skin',
@@ -628,7 +630,7 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           t.pending = true
           renderChat()
           try {
-            const result = await route.send('/naiwa-chat ' + JSON.stringify({mode, question}))
+            const result = await route.ask(mode, question)
             t.lines.push([result.ok ? '奶蛙' : '提示', result.text])
             if (!result.ok && mode === 'chat' && !t.draft) t.draft = question
           } finally {
@@ -780,7 +782,7 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
         React.useEffect(() => {
           const id = props.sessionId
           if (!id) return
-          const route = chatRoutes.get(id) ?? { send: props.send, count: 0 }
+          const route = chatRoutes.get(id) ?? { ask: props.ask, count: 0 }
           route.count++
           chatRoutes.set(id, route)
           renderChat?.()
@@ -936,22 +938,14 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
 
         const strengthRow = h('div', { key: 'strength', style: rowStyle },
           h('span', { style: labelStyle }, t('label.strength')),
-          h(Chip, {
-            key: 'off',
-            label: t('strength.off'),
-            active: view.strength === 'off',
+          ...STRENGTHS.map(strength => h(Chip, {
+            key: strength,
+            label: t('strength.' + strength),
+            active: view.strength === strength,
             disabled: pending,
             title: t('title.strength'),
-            onClick: function () { run('/naiwa strength off', { strength: 'off' }) },
-          }),
-          h(Chip, {
-            key: 'naiwa',
-            label: t('strength.naiwa'),
-            active: view.strength !== 'off',
-            disabled: pending,
-            title: t('title.strength'),
-            onClick: function () { run('/naiwa strength naiwa', { strength: 'naiwa' }) },
-          }),
+            onClick: function () { run('/naiwa strength ' + strength, { strength }) },
+          })),
         )
 
         const languageRow = h('div', { key: 'language', style: rowStyle },
@@ -1045,6 +1039,19 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
 
       /* ---------------- 通道 ---------------- */
 
+      async function askPet(sessionId, mode, question) {
+        try {
+          const response = await globalThis.fetch('api/naiwa-ism/pet-chat', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, mode, question }),
+          })
+          const result = await response.json()
+          if (typeof result.text === 'string') return { ok: response.ok && result.kind === 'success', text: result.text }
+        } catch (_) { /* The route can be unavailable during host reload. */ }
+        return { ok: false, text: '桌宠独立聊天接口不可用，请重启 DeepSeek Harness 并刷新页面。' }
+      }
+
       function makeSend(ctx, sessionId) {
         return async function send(line) {
           try {
@@ -1058,9 +1065,6 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
               return { ok: false, text: message + code }
             }
             if (outcome.value === undefined) {
-              if (line.startsWith('/naiwa-chat ')) {
-                return { ok: false, text: '宿主还没有加载奶蛙聊天命令。请重启 DeepSeek Harness，再刷新本页重试。' }
-              }
               return { ok: false, text: 'unknown or malformed command: ' + line }
             }
             const result = outcome.value.result
@@ -1108,6 +1112,7 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
               return {
                 sessionId: sessionId,
                 send: makeSend(ctx, sessionId),
+                ask: (mode, question) => askPet(sessionId, mode, question),
                 skin: skinBridge,
                 watchEnd: function (cb) { return watchTurnEnd(ctx, sessionId, cb) },
               }

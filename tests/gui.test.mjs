@@ -172,6 +172,27 @@ test('G3 inject(sessionId) 的 send 以该 sessionId 调 execute（attachments=[
   assert.equal(harness.executed[1].line, '/naiwa status')
 })
 
+test('桌宠通过独立接口闲聊和查进度，失败也不发送会话命令', async t => {
+  const { entry, harness } = mounted()
+  const props = entry.options.inject('s-1')
+  let offline = false
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async (path, init) => {
+    assert.equal(path, 'api/naiwa-ism/pet-chat')
+    assert.equal(init.method, 'POST')
+    calls.push(JSON.parse(init.body))
+    if (offline) throw new Error('offline')
+    return Response.json({kind:'success', text:'在呢'})
+  })
+  for (const mode of ['chat', 'progress']) {
+    assert.deepEqual(await props.ask(mode, '你好'), {ok:true, text:'在呢'})
+    assert.deepEqual(calls.at(-1), {sessionId:'s-1', mode, question:'你好'})
+  }
+  offline = true
+  assert.equal((await props.ask('chat', '再试试')).ok, false)
+  assert.deepEqual(harness.executed, [])
+})
+
 test('G4 send 失败四态归一化（host 错误 / value undefined / kind:error / 抛错）', async () => {
   const { entry, harness } = mounted()
   const props = entry.options.inject('s-1')
@@ -184,11 +205,6 @@ test('G4 send 失败四态归一化（host 错误 / value undefined / kind:error
   assert.equal(unknown.ok, false)
   assert.ok(unknown.text.includes('unknown or malformed command'), unknown.text)
   assert.ok(unknown.text.includes('/naiwa status'))
-  const missingChat = await props.send('/naiwa-chat ' + JSON.stringify({mode: 'chat', question: '你今天开心吗'}))
-  assert.equal(missingChat.ok, false)
-  assert.match(missingChat.text, /重启 DeepSeek Harness/)
-  assert.doesNotMatch(missingChat.text, /你今天开心吗/)
-
   harness.setResult({ ok: true, value: { commandId: 'c2', result: { kind: 'error', text: '参数不合法：档位只能是 …' } } })
   assert.deepEqual(await props.send('/naiwa strength turbo'), { ok: false, text: '参数不合法：档位只能是 …' })
 
@@ -257,7 +273,7 @@ test('G7 client.js 静态红线：classic script / 无 JSX / 无网络 / 无定�
   const banned = [
     /^\s*(import|export)\s/mu,
     /<[A-Z]/u,
-    /fetch\(/u,
+    /fetch\((?!'api\/naiwa-ism\/pet-chat')/u,
     /setInterval/u,
     /setTimeout/u,
     /addEventListener/u,
@@ -304,7 +320,7 @@ test('G8 locale 字典 zh/en 键集一致，NS 为 naiwa-ism', () => {
       assert.ok(value.length > 0, `${locale}.${key} must be non-empty`)
     }
   }
-  for (const key of ['strength.off', 'strength.naiwa', 'resident.on', 'resident.off', 'language.auto', 'language.zh', 'language.en', 'sync']) {
+  for (const key of ['strength.off', 'strength.naiwa', 'strength.nailoong', 'resident.on', 'resident.off', 'language.auto', 'language.zh', 'language.en', 'sync']) {
     assert.ok(zhKeys.includes(key), `dictionary missing ${key}`)
   }
 })
@@ -361,8 +377,8 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
     component = harness.slots.registrations[0].component
   }
   function select(mode) {
-    const rendered = component({ t: key => key, sessionId: 'demo', send: async line => {
-      questions.push(JSON.parse(line.slice('/naiwa-chat '.length)))
+    const rendered = component({ t: key => key, sessionId: 'demo', ask: async (mode, question) => {
+      questions.push({mode, question})
       return {ok: true, text: '我在呢。'}
     } })
     const row = rendered.children[1].children.find(child => child?.props.key === 'pet')

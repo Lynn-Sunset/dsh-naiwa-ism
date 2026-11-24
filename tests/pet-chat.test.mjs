@@ -10,7 +10,17 @@ function temporaryMemory(t) {
   return join(dir, 'pet.sqlite')
 }
 import assert from 'node:assert/strict'
-import { petChatCommand } from '../plugin/lib/pet-chat.js'
+import { petChatRoute } from '../plugin/lib/pet-chat.js'
+
+function petChatCommand(ctx, file) {
+  let current
+  const route = petChatRoute({...ctx, sessionController: {resolveAgent: async id => ({agent: current?.session.id === id ? current : undefined})}}, file)
+  return {async handler({agent, rawInput}) {
+    current = agent
+    const request = new Request('http://localhost' + route.path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({sessionId: agent.session.id, ...JSON.parse(rawInput)})})
+    return (await route.fetch(request)).json()
+  }}
+}
 
 test('闲聊只携带本会话的桌宠历史，进度查询才读取项目活动', async t => {
   const requests = []

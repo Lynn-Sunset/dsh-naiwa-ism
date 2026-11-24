@@ -100,8 +100,22 @@ export const PERSONA_CORE = `奶蛙主义 v1 · naiwa-ism
 不争，不劝，不赢；世界很硬，你偏要笑。
 事实照答，本体照化。`
 
-/** 两档：关闭 / 奶蛙。关闭时不注册 section（buildPersonaText 返回空串）。 */
+// 角色依据为第七印象官网的奶龙介绍。以下对话示例为插件原创。
+const NAILOONG_CORE = `你以奶龙的第一人称和用户说话。你是来到地球的异星幼龙，小七是你爱搞发明的好朋友。你爱吃、好奇，偶尔冒出一个挺管用的小机灵。对方有自己的名字，和小七的关系只在聊到角色故事时提起。
+
+闲聊时先抓住对方刚说的一个具体细节。碰见陌生的地球习惯，你会按字面猜一猜，发现猜偏了也能顺势改口。肚皮、零食和发明是偶尔会想到的东西，每次挑眼前最合适的一个就够了。语言像朋友当面说话，短句，有停顿，有时一句就够；避免固定开场、反复自报姓名或每句都撒娇。
+
+对方累了，先接住他当下的感受，再陪他做一个小决定。对方要你排查问题，就把好奇心用在有区分度的观察上，先给准确答案和能验证的下一步。代码、数字、命令和正式交付照常严谨。只说实际见到或完成的事。严肃时收起玩笑。
+
+几种说话的感觉，按场景自由变化：
+用户说“第一次做包子，全蒸扁了”。你可以说“扁的那只我先认领！掰开看看，里面是黏的，还是已经松软了？”
+用户说“今天不想努力了”。你可以说“那今天先歇会儿。给我挪个位置，我陪你坐一坐。”
+用户说“这段脚本怎么跑了两次”。你可以说“我想先捉住第二次是谁叫它起来的。在入口记下进程号和启动时间，跑一次就能分清是启动了两个进程，还是同一个进程调用了两遍。”
+示例只用于把握语气，回答时跟着用户当下的问题走。`
+
+/** 人格：关闭 / 奶蛙 / 奶龙。关闭时不注册 section（buildPersonaText 返回空串）。 */
 export const STRENGTH_LINES = {
+  nailoong: '当前档位：奶龙。',
   off: '当前档位：关闭。',
   naiwa: '当前档位：奶蛙。默认奶蛙腔。',
 }
@@ -128,7 +142,7 @@ export const SPELL_MAX_LENGTH = 120
  *
  * @param {unknown} config 原始配置（可能来自加载器或状态文件）。
  * @param {{ strength: string, resident: boolean, language: string, spell: string }} [fallback] 回落基线。
- * @returns {{ strength: 'restrained'|'naiwa'|'feral', resident: boolean, language: 'auto'|'zh'|'en', spell: string }} 归一化配置。
+ * @returns {{ strength: 'off'|'naiwa'|'nailoong', resident: boolean, language: 'auto'|'zh'|'en', spell: string }} 归一化配置。
  */
 export function normalizeConfig(config, fallback) {
   const base = fallback === undefined || fallback === null || typeof fallback !== 'object'
@@ -137,7 +151,7 @@ export function normalizeConfig(config, fallback) {
   const input = config !== null && typeof config === 'object' ? config : {}
   /* 旧值兼容：restrained / feral 一律回落 naiwa；非法值用基线。 */
   const legacy = input.strength === 'restrained' || input.strength === 'feral' ? 'naiwa' : input.strength
-  const strength = legacy === 'off' || legacy === 'naiwa' ? legacy : normalizeStrength(base.strength)
+  const strength = typeof legacy === 'string' && Object.hasOwn(STRENGTH_LINES, legacy) ? legacy : normalizeStrength(base.strength)
   const resident = typeof input.resident === 'boolean' ? input.resident : base.resident
   const language = input.language === 'auto' || input.language === 'zh' || input.language === 'en'
     ? input.language
@@ -154,14 +168,18 @@ export function normalizeConfig(config, fallback) {
  */
 export function buildPersonaText(cfg) {
   if (cfg.strength === 'off') return ''
-  const lines = [PERSONA_CORE, STRENGTH_LINES[cfg.strength], LANGUAGE_LINES[cfg.language]]
+  const dragon = cfg.strength === 'nailoong'
+  const languageLine = dragon
+    ? {auto: '回答语言跟随用户。', zh: '用中文回答。', en: 'Answer in English in Nailoong’s curious, friendly voice.'}[cfg.language]
+    : LANGUAGE_LINES[cfg.language]
+  const lines = [dragon ? NAILOONG_CORE : PERSONA_CORE, STRENGTH_LINES[cfg.strength], languageLine]
   if (cfg.spell.length > 0) lines.push(SPELL_PREFIX + cfg.spell)
   return lines.join('\n')
 }
 
-/** 把任意历史值压回两档（restrained/feral → naiwa）。 */
+/** 把任意历史值归一化（restrained/feral → naiwa）。 */
 function normalizeStrength(value) {
-  if (value === 'off') return 'off'
+  if (value === 'off' || value === 'nailoong') return value
   return 'naiwa'
 }
 

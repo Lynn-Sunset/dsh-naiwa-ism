@@ -13,17 +13,17 @@
 import { SPELL_MAX_LENGTH, VERSION, normalizeConfig } from './corpus.js'
 import { clearState, loadState, saveState } from './state.js'
 
-/** 合法档位（规范值）：两档——关闭 / 奶蛙。 */
-export const STRENGTHS = ['off', 'naiwa']
+/** 合法档位（规范值）：关闭 / 奶蛙 / 奶龙。 */
+export const STRENGTHS = ['off', 'naiwa', 'nailoong']
 /** 合法语言。 */
 export const LANGUAGES = ['auto', 'zh', 'en']
 /** 工具 field 合法值。 */
 export const CONTROL_FIELDS = ['strength', 'resident', 'language', 'spell']
 
-const STRENGTH_LABELS = { off: '关闭', naiwa: '奶蛙' }
+const STRENGTH_LABELS = { off: '关闭', naiwa: '奶蛙', nailoong: '奶龙' }
 const LANGUAGE_LABELS = { auto: '跟随用户', zh: '中文', en: 'English' }
 const STRENGTH_ALIASES = {
-  off: 'off', naiwa: 'naiwa', 关闭: 'off', 奶蛙: 'naiwa',
+  off: 'off', naiwa: 'naiwa', nailoong: 'nailoong', nailong: 'nailoong', 奶龙: 'nailoong', 关闭: 'off', 奶蛙: 'naiwa',
   /* 旧值兼容：一律落到 naiwa。 */
   restrained: 'naiwa', feral: 'naiwa', 克制: 'naiwa', 全蛙: 'naiwa', 狂妄: 'naiwa',
 }
@@ -31,7 +31,7 @@ const RESIDENT_ALIASES = { on: true, off: false, true: true, false: false, 开: 
 const LANGUAGE_ALIASES = { auto: 'auto', zh: 'zh', en: 'en', 中文: 'zh', 英文: 'en' }
 
 /** 命令语法提示（错误文案与 input.hint 共用）。 */
-export const SYNTAX_HINT = 'status | strength <off|naiwa> | resident <on|off> | language <auto|zh|en> | spell <文本> | reset'
+export const SYNTAX_HINT = 'status | strength <off|naiwa|nailoong> | resident <on|off> | language <auto|zh|en> | spell <文本> | reset'
 
 const INVALID = '参数不合法：'
 
@@ -105,7 +105,7 @@ export function applyOperation(control, op) {
   }
   if (op.kind === 'strength') {
     const next = STRENGTH_ALIASES[op.value]
-    if (next === undefined) return fail(INVALID + '档位只能是 off / naiwa（或 关闭 / 奶蛙）。语法：/naiwa ' + SYNTAX_HINT)
+    if (!STRENGTHS.includes(next)) return fail(INVALID + '档位只能是 off / naiwa / nailoong（或 关闭 / 奶蛙 / 奶龙）。语法：/naiwa ' + SYNTAX_HINT)
     return commit(control, { strength: next }, '档位已设为 ' + STRENGTH_LABELS[next] + '。', 'strength')
   }
   if (op.kind === 'resident') {
@@ -200,7 +200,7 @@ const CONFIG_OUTPUT = {
   properties: {
     action: { type: 'string', enum: ['get', 'set'] },
     applied: { type: 'boolean' },
-    strength: { type: 'string', enum: ['off', 'naiwa'] },
+    strength: { type: 'string', enum: STRENGTHS },
     resident: { type: 'boolean' },
     language: { type: 'string', enum: ['auto', 'zh', 'en'] },
     spell: { type: 'string' },
@@ -251,7 +251,7 @@ export function buildConfigTool(control) {
       properties: {
         action: { type: 'string', enum: ['get', 'set'], description: 'get=读取当前控制状态；set=修改一个字段。' },
         field: { type: 'string', enum: CONTROL_FIELDS, description: 'set 时要修改的字段；get 时忽略。' },
-        value: { type: 'string', description: 'set 的新值：strength=off|naiwa（或关闭|奶蛙）；resident=on|off；language=auto|zh|en；spell=任意文本，空串清空。' },
+        value: { type: 'string', description: 'set 的新值：strength=off|naiwa|nailoong（或关闭|奶蛙|奶龙）；resident=on|off；language=auto|zh|en；spell=任意文本，空串清空。' },
       },
       required: ['action'],
       additionalProperties: false,

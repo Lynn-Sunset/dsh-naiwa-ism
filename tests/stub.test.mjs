@@ -36,6 +36,8 @@ function fakeCtx() {
     if (index >= 0) list.splice(index, 1)
   }
   const ctx = {
+    inject(keys, setup) { setup(this) },
+    connection: { fetch: { register: () => () => {} } },
     effect(factory, label) {
       const dispose = factory()
       const wrapped = () => {

@@ -7,7 +7,7 @@ Web 面板提供人格、语言、皮肤和音效设置。人格与语言由宿�
 | 输入 | 行为 | 成功文本（开头） |
 |---|---|---|
 | `/naiwa` 或 `/naiwa status` | 读当前状态 | `奶蛙控制：档位=…；常驻=…；语言=…；咒语=…；持久化=…。` |
-| `/naiwa strength off\|naiwa`（或 `关闭\|奶蛙`） | 改档位（off 不注入人格） | `档位已设为 关闭。持久化：已写入 state/settings.json。` |
+| `/naiwa strength off\|naiwa\|nailoong`（或 `关闭\|奶蛙\|奶龙`） | 改档位（off 不注入人格） | `档位已设为 关闭。持久化：已写入 state/settings.json。` |
 | `/naiwa resident on\|off`（或 `开\|关`） | 常驻开关 | `常驻已开启。` / `常驻已关闭。` |
 | `/naiwa language auto\|zh\|en`（或 `中文\|英文`） | 回答语言 | `语言已设为 English。` |
 | `/naiwa spell <文本>`（空 = 清空，>120 截断） | 自定义咒语 | `咒语已更新。` / `咒语已清空。` |
@@ -22,10 +22,14 @@ Web 面板提供人格、语言、皮肤和音效设置。人格与语言由宿�
 |---|---|---|---|
 | `action` | string | 是 | `get`（读状态）/ `set`（改一个字段）。 |
 | `field` | string | set 时必填 | `strength` / `resident` / `language` / `spell`。 |
-| `value` | string | set 时必填 | `strength=off\|naiwa`；`resident=on\|off`；`language=auto\|zh\|en`；`spell=任意文本`（空串清空）。 |
+| `value` | string | set 时必填 | `strength=off\|naiwa\|nailoong`；`resident=on\|off`；`language=auto\|zh\|en`；`spell=任意文本`（空串清空）。 |
 
 返回值（canonical，`output.schema` 校验）：`action`、`applied`、`strength`、`resident`、`language`、`spell`、`persisted`、`message`、`version`。非法 `field` / `action` 返回 `applied: false` 与说明，不抛错。
 
+
+## 奶龙人格
+
+在面板选择「人格 → 奶龙」，或输入 `/naiwa strength 奶龙`。从下一轮起，主对话使用奶龙口吻，重启后保留选择。角色创作参考[第七印象对奶龙和小七的介绍](https://www.nailoong.com/)，对话示例由插件原创。
 
 ## 页面桌宠
 
@@ -35,4 +39,4 @@ Web 面板提供人格、语言、皮肤和音效设置。人格与语言由宿�
 
 ### 和奶蛙聊天
 
-点击桌宠，在气泡里写消息后按 Enter，Shift+Enter 换行。闲聊使用所选 Harness 会话配置的 DeepSeek 模型和凭据，成功问答按会话归档，不设轮数上限。接近模型输入预算时，使用同一模型将较早的对话增量压缩为摘要，近期问答保留原文；摘要与原文一同保存。压缩会额外调用模型，摘要可能省略细节。记忆保存在本机 Harness 数据目录的 `storages/naiwa-ism/pet-memory.sqlite`；宿主重启后打开原会话即可继续。选择「看进度」会把所选项目会话的近期文字和工具活动交给模型总结。对话通过宿主命令通道发送，宿主可能在命令日志中保存回复。
+点击桌宠，在气泡里写消息后按 Enter，Shift+Enter 换行。闲聊使用所选 Harness 会话配置的 DeepSeek 模型和凭据，成功问答按会话归档，不设轮数上限。接近模型输入预算时，使用同一模型将较早的对话增量压缩为摘要，近期问答保留原文；摘要与原文一同保存。压缩会额外调用模型，摘要可能省略细节。记忆保存在本机 Harness 数据目录的 `storages/naiwa-ism/pet-memory.sqlite`；宿主重启后打开原会话即可继续。选择「看进度」会把所选项目会话的近期文字和工具活动交给模型总结。闲聊和进度查询通过宿主鉴权的独立接口发送，回复仅显示在桌宠气泡中。升级前已有的命令记录会保留。

@@ -26,6 +26,7 @@
 | 操作 | 用途 |
 | --- | --- |
 | `/naiwa strength naiwa` | 启用奶蛙人格 |
+| `/naiwa strength 奶龙` | 切换为好奇、爱吃的奶龙人格 |
 | `/naiwa strength off` | 关闭人格，保留工具 |
 | `/naiwa language zh` | 将回答语言设为中文 |
 | `naiwa_gloss` | 提供五拍写作指引和独立的语感示例，由模型据此写作 |

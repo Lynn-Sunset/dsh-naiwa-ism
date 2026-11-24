@@ -95,7 +95,7 @@ function countProtected(text) {
 test('F1 package.json / locale 可解析；exports 完整；无依赖与 engines', async () => {
   const pkg = await readJson('package.json')
   assert.equal(pkg.name, '@local/dsh-naiwa-ism')
-  assert.equal(pkg.version, '1.3.0')
+  assert.equal(pkg.version, '1.4.0')
   assert.equal(pkg.type, 'module')
   for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'engines']) {
     assert.equal(pkg[field], undefined, `package.json must not declare ${field}`)

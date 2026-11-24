@@ -32,6 +32,8 @@ function fakeHostCtx() {
     if (index >= 0) list.splice(index, 1)
   }
   const ctx = {
+    inject(keys, setup) { setup(this) },
+    connection: { fetch: { register: () => () => {} } },
     effect(factory, label) {
       const dispose = factory()
       effects.push({ label, dispose })
@@ -110,7 +112,7 @@ test('C1 apply 装配：section / 四工具 / 命令 / 三个 effect', () => {
     ['naiwa_art', 'naiwa_config', 'naiwa_gloss', 'naiwa_speak'],
   )
 
-  assert.deepEqual(harness.commands.map(command => command.name), ['naiwa', 'naiwa-chat'])
+  assert.deepEqual(harness.commands.map(command => command.name), ['naiwa'])
   const command = harness.commands[0]
   assert.equal(command.name, 'naiwa')
   assert.equal(typeof command.description, 'string')
@@ -256,7 +258,7 @@ test('C7 重载恢复：二次 apply 从状态文件读回 off，section 不注�
   apply(second.ctx, { stateFile: file })
   assert.equal(second.sections.length, 0, 'off must persist across reload')
   assert.equal(second.tools.length, 4)
-  assert.equal(second.commands.length, 2)
+  assert.equal(second.commands.length, 1)
 
   const status = invoke(second.commands[0], ' status')
   assert.ok(status.text.includes('档位=关闭'), status.text)
@@ -340,7 +342,7 @@ test('C11 常驻开关：off 撤 section 但保留四工具与命令，on 再注
   assert.equal(off.kind, 'success')
   assert.equal(harness.sections.length, 0)
   assert.equal(harness.tools.length, 4)
-  assert.deepEqual(harness.commands.map(command => command.name), ['naiwa', 'naiwa-chat'])
+  assert.deepEqual(harness.commands.map(command => command.name), ['naiwa'])
 
   const on = invoke(command, ' resident on')
   assert.equal(on.kind, 'success')
@@ -405,3 +407,21 @@ function schemaErrors(value, schema) {
   }
   return errors
 }
+
+test('奶龙可用中文命令选择，重启后恢复，工具可切回奶蛙', async () => {
+  const stateFile = tempStateFile()
+  const first = fakeHostCtx()
+  apply(first.ctx, {stateFile})
+  assert.equal(invoke(first.commands[0], 'strength 奶龙').kind, 'success')
+  assert.match(first.sections[0].text, /异星幼龙/)
+  assert.doesNotMatch(first.sections[0].text, /蛙腔/)
+  const second = fakeHostCtx()
+  apply(second.ctx, {stateFile})
+  const tool = toolOf(second, 'naiwa_config')
+  assert.equal((await tool.execute({action:'get'})).strength, 'nailoong')
+  invoke(second.commands[0], 'language en')
+  assert.match(second.sections[0].text, /Answer in English/)
+  await tool.execute({action:'set',field:'strength',value:'naiwa'})
+  assert.match(second.sections[0].text, /当前档位：奶蛙/)
+  assert.doesNotMatch(second.sections[0].text, /异星幼龙/)
+})

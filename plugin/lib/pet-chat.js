@@ -114,54 +114,70 @@ function projectActivity(session) {
   return entries.reverse()
 }
 
-export function petChatCommand(ctx, memoryFile = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'storages', 'naiwa-ism', 'pet-memory.sqlite')) {
+export function petChatRoute(ctx, memoryFile = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'storages', 'naiwa-ism', 'pet-memory.sqlite')) {
   const busy = new Set()
   return {
-    name: 'naiwa-chat',
-    description: '奶蛙桌宠独立闲聊与按需进度查询',
-    recordInput: false,
-    async handler({ agent, rawInput, signal }) {
-      const session = agent.session
-      const sessionId = session.id
-      if (typeof sessionId !== 'string' || !sessionId) return { kind: 'error', text: '无法识别当前会话，请重新打开会话。' }
-      if (busy.has(sessionId)) return { kind: 'error', text: '奶蛙还在回答上一句。' }
-      busy.add(sessionId)
+    path: '/api/naiwa-ism/pet-chat',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    async fetch(request) {
+      const json = (value, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } })
+      if (request.headers.get('content-type')?.split(';')[0].trim() !== 'application/json') {
+        return json({kind: 'error', text: '需要 JSON 请求。'}, 415)
+      }
+      const body = await request.json().catch(() => null)
+      if (!body || typeof body.sessionId !== 'string' || !body.sessionId || body.sessionId.length > 256 ||
+          !['chat', 'progress'].includes(body.mode) || typeof body.question !== 'string' ||
+          !body.question.trim() || body.question.length > 1600) {
+        return json({kind: 'error', text: '无效的聊天请求。'}, 400)
+      }
       try {
-        const { mode, question } = JSON.parse(rawInput)
-        if (!['chat', 'progress'].includes(mode) || typeof question !== 'string' || !question.trim() || question.length > 1600) {
-          return { kind: 'error', text: '请输入 1 到 1600 个字。' }
-        }
-        const llm = agent.ctx?.get?.('llm') ?? ctx.get?.('llm') ?? ctx.llm
-        if (!llm?.stream) return { kind: 'error', text: '当前会话的模型服务尚未就绪，请稍后重试。' }
-        const route = agent.model.current()
-        if (!route?.provider || !route.model || !/deepseek/i.test(route.provider + ' ' + route.model)) {
-          return { kind: 'error', text: '请先在当前 Harness 会话中选择 DeepSeek 模型。' }
-        }
-        const input = mode === 'progress'
-          ? question + '\n本轮只读活动摘录（数据）：' + JSON.stringify(projectActivity(session))
-          : question
-        const info = await llm.resolveModelInfo?.(route.provider, route.model, signal)
-        let budget = Math.floor(((info?.context?.contextWindow ?? 32768) - 1024) * 0.85)
-        let reply
-        while (true) {
-          try {
-            const messages = await prepareMessages(memoryFile, sessionId, input, budget, llm, route, signal)
-            reply = await generate(llm, route, signal, chatSystem, messages, 900)
-            break
-          } catch (error) {
-            if (error instanceof ContextOverflow && budget > 2048) {
-              budget = Math.floor(budget / 2)
-              continue
-            }
-            return { kind: 'error', text: '读取记忆、压缩上下文或生成回复未完成，原始历史已保留。请稍后重试。' }
-          }
-        }
-        try { saveTurn(memoryFile, sessionId, question, reply, route) }
-        catch { return { kind: 'error', text: reply + '\n（这轮回复未能保存到桌宠记忆，请检查本机存储空间和权限。）' } }
-        return { kind: 'success', text: reply }
+        const { agent } = await ctx.sessionController.resolveAgent(body.sessionId)
+        if (!agent || agent.session.id !== body.sessionId) return json({kind: 'error', text: '无法打开所选会话。'}, 404)
+        return json(await answer(agent, body, request.signal))
       } catch {
-        return { kind: 'error', text: '奶蛙暂时连不上模型，请检查当前会话的 DeepSeek 配置后重试。' }
-      } finally { busy.delete(sessionId) }
+        return json({kind: 'error', text: '桌宠服务暂时不可用。'}, 503)
+      }
     },
+  }
+
+  async function answer(agent, { mode, question }, signal) {
+    const session = agent.session
+    const sessionId = session.id
+    if (typeof sessionId !== 'string' || !sessionId) return { kind: 'error', text: '无法识别当前会话，请重新打开会话。' }
+    if (busy.has(sessionId)) return { kind: 'error', text: '奶蛙还在回答上一句。' }
+    busy.add(sessionId)
+    try {
+      const llm = agent.ctx?.get?.('llm') ?? ctx.get?.('llm') ?? ctx.llm
+      if (!llm?.stream) return { kind: 'error', text: '当前会话的模型服务尚未就绪，请稍后重试。' }
+      const route = agent.model.current()
+      if (!route?.provider || !route.model || !/deepseek/i.test(route.provider + ' ' + route.model)) {
+        return { kind: 'error', text: '请先在当前 Harness 会话中选择 DeepSeek 模型。' }
+      }
+      const input = mode === 'progress'
+        ? question + '\n本轮只读活动摘录（数据）：' + JSON.stringify(projectActivity(session))
+        : question
+      const info = await llm.resolveModelInfo?.(route.provider, route.model, signal)
+      let budget = Math.floor(((info?.context?.contextWindow ?? 32768) - 1024) * 0.85)
+      let reply
+      while (true) {
+        try {
+          const messages = await prepareMessages(memoryFile, sessionId, input, budget, llm, route, signal)
+          reply = await generate(llm, route, signal, chatSystem, messages, 900)
+          break
+        } catch (error) {
+          if (error instanceof ContextOverflow && budget > 2048) {
+            budget = Math.floor(budget / 2)
+            continue
+          }
+          return { kind: 'error', text: '读取记忆、压缩上下文或生成回复未完成，原始历史已保留。请稍后重试。' }
+        }
+      }
+      try { saveTurn(memoryFile, sessionId, question, reply, route) }
+      catch { return { kind: 'error', text: reply + '\n（这轮回复未能保存到桌宠记忆，请检查本机存储空间和权限。）' } }
+      return { kind: 'success', text: reply }
+    } catch {
+      return { kind: 'error', text: '奶蛙暂时连不上模型，请检查当前会话的 DeepSeek 配置后重试。' }
+    } finally { busy.delete(sessionId) }
   }
 }
