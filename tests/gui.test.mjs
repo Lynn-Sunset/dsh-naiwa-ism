@@ -193,6 +193,40 @@ test('桌宠通过独立接口闲聊和查进度，失败也不发送会话命�
   assert.deepEqual(harness.executed, [])
 })
 
+test('图片从面板真实发送入口进入宿主附件服务', async t => {
+  const {petChatRoute} = await import('../plugin/lib/pet-chat.js')
+  const {mkdtempSync, rmSync} = await import('node:fs')
+  const {tmpdir} = await import('node:os')
+  const dir = mkdtempSync(join(tmpdir(), 'pet-image-route-'))
+  t.after(() => rmSync(dir, {recursive:true, force:true}))
+  const image = {name:'image.png', mediaType:'image/png', data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jk1sAAAAASUVORK5CYII='}
+  const block = {type:'image', attachment:{attachmentId:'screen'}}
+  const store = {async admitPromptContent(parts) {
+    assert.deepEqual(parts,[{type:'image', ...image}])
+    return [block]
+  }}
+  let sawImage = false
+  const host = petChatRoute({
+    sessionController:{resolveAgent:async id => ({agent:{session:{id}, model:{current:()=>({provider:'deepseek',model:'vision'})}}})},
+    get:key => key === 'attachments' ? store : undefined,
+    llm:{async *stream(request) {
+      sawImage = true
+      assert.deepEqual(request.messages.at(-1).content.at(-1),block)
+      yield {type:'text-delta',text:'收到图片'}
+      yield {type:'finish',reason:{kind:'stop'}}
+    }},
+  },join(dir,'memory.sqlite'))
+  const props = mounted().entry.options.inject('image-session')
+  t.mock.method(globalThis,'fetch',async (path, init) => {
+    const request = new Request(new URL(path,'http://localhost'),init)
+    assert.equal(new URL(request.url).pathname,host.path)
+    assert.equal(JSON.parse(init.body).mode,'chat')
+    return host.fetch(request)
+  })
+  assert.deepEqual(await props.ask('chat','',image),{ok:true,text:'收到图片'})
+  assert.ok(sawImage)
+})
+
 test('G4 send 失败四态归一化（host 错误 / value undefined / kind:error / 抛错）', async () => {
   const { entry, harness } = mounted()
   const props = entry.options.inject('s-1')
@@ -343,7 +377,7 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
     get lastChild() { return this.children.at(-1) },
     remove() { this.parent.children = this.parent.children.filter(child => child !== this) },
   })
-  const doc = { head: node(), body: node(), createElement: node }
+  const doc = { head: node(), body: node(), createElement: tag => Object.assign(node(), {tag}) }
   const backgroundChanges = []
   doc.body.classList = {
     add: name => backgroundChanges.push(name),
@@ -359,7 +393,10 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
     useState: initial => [initial === false ? true : typeof initial === 'function' ? initial() : initial, () => {}],
   }
   const context = createContext({
-    document: doc,
+    document: doc, innerWidth: 1000, innerHeight: 800,
+    FileReader: class {
+      readAsDataURL(file) { this.result = 'data:' + file.type + ';base64,aQ=='; this.onload() }
+    },
     Audio: class {
       constructor(src) { this.src = src }
       play() { played.push(this.src); return Promise.resolve() }
@@ -377,9 +414,9 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
     component = harness.slots.registrations[0].component
   }
   function select(mode) {
-    const rendered = component({ t: key => key, sessionId: 'demo', ask: async (mode, question) => {
-      questions.push({mode, question})
-      return {ok: true, text: '我在呢。'}
+    const rendered = component({ t: key => key, sessionId: 'demo', ask: async (mode, question, image) => {
+      questions.push(image ? {mode, question, image} : {mode, question})
+      return {ok: true, text: '**已完成**\n- 修复 `finalize`\n- 发布 **1.0.4**'}
     } })
     const row = rendered.children[1].children.find(child => child?.props.key === 'pet')
     row.children.find(child => child.props.key === mode).props.onClick()
@@ -414,19 +451,58 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
   pet.onpointerup(pointer)
   pet.onclick({ detail: 1 })
   const box = doc.body.children[1]
+  const header = box.firstChild
+  box.getBoundingClientRect = () => ({left: 60, top: 100, width: 420, height: 300})
   const [, , log, form] = box.children
   const [input, actions] = form.children
+  for (const target of [header.firstChild, log.firstChild, input, actions.firstChild, header.lastChild, box]) {
+    const grab = {...pointer, target, clientX:70, clientY:115, preventDefault() {}}
+    box.onpointerdown(grab)
+    box.onpointermove({...grab, clientX:72})
+    assert.equal(box.attrs.has('data-dragging'), false)
+    box.onpointermove({...grab, clientX:2000, clientY:-50})
+    assert.equal(box.style.left, '574px')
+    assert.equal(box.style.top, '6px')
+    box.onpointermove({...grab, clientX:310, clientY:245})
+    box.onpointerup(grab)
+    let blocked = false
+    const click = {detail:1, preventDefault() {}, stopImmediatePropagation() { blocked = true }}
+    box.onclick(click)
+    assert.ok(blocked)
+    blocked = false
+    box.onpointerdown(grab)
+    box.onpointerup(grab)
+    box.onclick(click)
+    assert.equal(blocked,false)
+  }
   assert.match(log.firstChild.textContent, /想跟我聊/)
   assert.deepEqual(questions, [])
   input.value = '你好'
   input.oninput()
   form.onsubmit({ preventDefault() {} })
   await new Promise(resolve => setImmediate(resolve))
-  assert.equal(log.lastChild.textContent, '奶蛙：我在呢。')
+  const [speaker, title, list] = log.lastChild.children
+  assert.equal(box.style.left, '300px')
+  assert.equal(box.style.top, '230px')
+  assert.equal(speaker.textContent, '奶蛙')
+  assert.equal(title.tag, 'h4')
+  assert.equal(title.firstChild.textContent, '已完成')
+  assert.equal(list.tag, 'ul')
+  assert.equal(list.children.length, 2)
+  assert.equal(list.firstChild.lastChild.tag, 'code')
+  assert.equal(list.firstChild.lastChild.textContent, 'finalize')
+  assert.equal(list.lastChild.lastChild.tag, 'strong')
   assert.deepEqual(questions[0], {mode:'chat', question:'你好'})
   actions.firstChild.onclick()
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(questions[1].mode, 'progress')
+  const file = {name:'screen.png', type:'image/png'}
+  input.onpaste({clipboardData:{files:[file]}, preventDefault() {}})
+  assert.match(form.children[2].textContent, /screen.png/)
+  form.onsubmit({preventDefault() {}})
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(JSON.parse(JSON.stringify(questions[2])), {mode:'chat',question:'',image:{mediaType:'image/png',data:'aQ==',name:'screen.png'}})
+  assert.equal(form.children[2].hidden,true)
   assert.equal(pet.attrs.has('data-reacting'), true)
   assert.notEqual(pet.firstChild.firstChild.srcset, last)
   assert.equal(settings.get('naiwa-ism:pet'), 'hop')
