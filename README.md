@@ -1,5 +1,7 @@
 # 奶蛙主义 · Naiwa-ism
 
+简体中文 · [English](./README.en.md)
+
 一个给 DeepSeek Harness 会话加上奶蛙口吻的插件。它提供叙事、美术提示词和语言节奏三个工具，也可以在 Web 面板里切换人格、语言、皮肤与回合结束提示音。
 
 <img src="./assets/naiwa.png" alt="奶蛙桌宠从抱着肚子站立到仰头大笑的三个画面" width="720">
