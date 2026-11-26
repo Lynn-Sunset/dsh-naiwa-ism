@@ -78,7 +78,8 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           'title.sync': '读取 Host 当前设置',
           'label.strength': '人格',
           'label.resident': '常驻',
-          'label.language': '语言',
+          'label.ui': '界面语言',
+          'label.language': '回答语言',
           'label.skin': '皮肤',
           'label.sound': '音效',
           'pet.label': '桌宠',
@@ -116,7 +117,8 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           'title.sync': 'Read the Host settings',
           'label.strength': 'Persona',
           'label.resident': 'Resident',
-          'label.language': 'Language',
+          'label.ui': 'Interface language',
+          'label.language': 'Reply language',
           'label.skin': 'Skin',
           'label.sound': 'Sound',
           'pet.label': 'Pet',
@@ -580,9 +582,9 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           const item = el('div')
           item.className = 'naiwa-chat-message'
           item.setAttribute('data-speaker', who)
-          item.append(el('small', who))
+          item.append(el('small', ui(who)))
           if (who !== '奶蛙') {
-            item.append(el('p', text))
+            item.append(el('p', who === '提示' ? ui(text) : text))
             return item
           }
           const lines = text.split(/\r?\n/)
@@ -715,9 +717,20 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           return chatThreads.get(id)
         }
         renderChat = () => {
+          box.setAttribute('aria-label', ui('和奶蛙聊聊'))
+          header.firstChild.textContent = ui('奶蛙')
+          close.textContent = ui('关闭')
+          picker.setAttribute('aria-label', ui('项目会话'))
+          input.placeholder = ui('写给奶蛙…')
+          input.setAttribute('aria-label', ui('写给奶蛙'))
+          progress.textContent = ui('看进度')
+          progress.title = ui('读取所选会话的近期活动，请奶蛙总结')
+          attach.textContent = ui('添加图片')
+          attachment.title = ui('移除图片')
+          send.textContent = ui('发送')
           if (!chatRoutes.has(chatSession)) chatSession = chatRoutes.size === 1 ? chatRoutes.keys().next().value : undefined
           picker.replaceChildren()
-          if (!chatSession) picker.append(el('option', '选择项目会话'))
+          if (!chatSession) picker.append(el('option', ui('选择项目会话')))
           for (const id of chatRoutes.keys()) {
             const option = el('option', id)
             option.value = id
@@ -731,9 +744,9 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           attachment.textContent = t?.image ? t.image.name + ' ×' : ''
           attachment.disabled = attach.disabled = send.disabled = progress.disabled = !t || t.pending
           log.replaceChildren()
-          if (!t?.lines.length) log.append(el('p', chatRoutes.size ? '今天想跟我聊点什么？也可以让我看看项目进度。' : '先打开一个 Harness 会话，我就能陪你聊了。'))
+          if (!t?.lines.length) log.append(el('p', chatRoutes.size ? ui('今天想跟我聊点什么？也可以让我看看项目进度。') : ui('先打开一个 Harness 会话，我就能陪你聊了。')))
           for (const [who, text] of t?.lines ?? []) log.append(message(who, text))
-          if (t?.pending) log.append(el('p', '奶蛙正在想…'))
+          if (t?.pending) log.append(el('p', ui('奶蛙正在想…')))
           log.scrollTop = log.scrollHeight
           if (!t?.pending && t?.lines.at(-1)?.[0] === '奶蛙') {
             log.scrollTop = Math.max(0, log.scrollTop + log.lastChild.getBoundingClientRect().top - log.getBoundingClientRect().top)
@@ -746,7 +759,7 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           const route = chatRoutes.get(chatSession)
           if (!route) return
           const t = thread(chatSession)
-          const question = mode === 'progress' ? '看看这个项目目前做到了哪里？' : input.value.trim()
+          const question = mode === 'progress' ? ui('看看这个项目目前做到了哪里？') : input.value.trim()
           const file = mode === 'chat' ? t.image : undefined
           if ((!question && !file) || t.pending) return
           if (mode === 'chat') t.draft = ''
@@ -882,7 +895,7 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           petNode = doc.createElement('button')
           petNode.type = 'button'
           petNode.className = 'naiwa-pet'
-          petNode.title = globalThis.navigator?.language?.startsWith('en')
+          petNode.title = english()
             ? 'Chat with Naiwa · drag to move' : '和奶蛙聊聊 · 按住拖动'
           petNode.setAttribute('aria-label', petNode.title)
           bindPetInput(petNode)
@@ -911,8 +924,66 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
       }
 
 
+      const uiListeners = new Set()
+      const subscribeUI = listener => { uiListeners.add(listener); return () => uiListeners.delete(listener) }
+      let uiLanguage
+      try { uiLanguage = globalThis.localStorage?.getItem('naiwa-ism:ui-language') } catch {}
+      let hostEnglish = globalThis.navigator?.language?.startsWith('en')
+      const english = () => uiLanguage === 'en' || (uiLanguage !== 'zh' && hostEnglish)
+      const interfaceEnglish = {
+        "奶蛙": "Naiwa",
+        "你": "You",
+        "提示": "Notice",
+        "和奶蛙聊聊": "Chat with Naiwa",
+        "关闭": "Close",
+        "项目会话": "Project session",
+        "写给奶蛙…": "Message Naiwa…",
+        "写给奶蛙": "Message Naiwa",
+        "看进度": "Check progress",
+        "读取所选会话的近期活动，请奶蛙总结": "Summarize recent activity in the selected session",
+        "发送": "Send",
+        "添加图片": "Add image",
+        "移除图片": "Remove image",
+        "选择项目会话": "Select a session",
+        "今天想跟我聊点什么？也可以让我看看项目进度。": "What would you like to talk about? You can also ask me about project progress.",
+        "先打开一个 Harness 会话，我就能陪你聊了。": "Open a Harness session to start chatting.",
+        "奶蛙正在想…": "Naiwa is thinking…",
+        "看看这个项目目前做到了哪里？": "How is this project coming along?",
+        "请选择 PNG、JPEG、WebP 或 GIF 图片。": "Choose a PNG, JPEG, WebP or GIF image.",
+        "图片读取或发送失败，请重试。": "Could not read or send the image. Try again.",
+        "图片超过上传限制，请缩小后重试。": "The image exceeds the upload limit. Try a smaller image.",
+        "桌宠独立聊天接口不可用，请重启 DeepSeek Harness 并刷新页面。": "Pet chat is unavailable. Restart Harness and refresh the page.",
+        "需要 JSON 请求。": "A JSON request is required.",
+        "无效的聊天请求。": "Invalid chat request.",
+        "无效的图片附件。": "Invalid image attachment.",
+        "无法打开所选会话。": "Could not open the selected session.",
+        "桌宠服务暂时不可用。": "Pet chat is temporarily unavailable.",
+        "无法识别当前会话，请重新打开会话。": "Reopen the current session and try again.",
+        "奶蛙还在回答上一句。": "Naiwa is still replying.",
+        "当前会话的模型服务尚未就绪，请稍后重试。": "The model service is not ready. Try again shortly.",
+        "请先在当前 Harness 会话中选择 DeepSeek 模型。": "Select a DeepSeek model in this Harness session first.",
+        "当前模型仅支持文字，请切换到支持图片的 DeepSeek 模型后重试。": "Choose a DeepSeek model that supports images and try again.",
+        "Harness 图片附件服务尚未就绪。": "The Harness image service is not ready.",
+        "Harness 无法接收这张图片，请检查图片格式和大小后重试。": "Check the image format and size and try again.",
+        "读取记忆、压缩上下文或生成回复未完成，原始历史已保留。请稍后重试。": "Could not load chat memory or complete the reply. Your history is saved. Try again.",
+        "奶蛙暂时连不上模型，请检查当前会话的 DeepSeek 配置后重试。": "Could not reach the model. Check this session's DeepSeek settings and try again."
+      }
+      const ui = text => english() ? interfaceEnglish[text] ?? text : text
+      function chooseUI(language) {
+        uiLanguage = language
+        try { globalThis.localStorage?.setItem('naiwa-ism:ui-language', language) } catch {}
+        if (petNode) {
+          petNode.title = english() ? 'Chat with Naiwa · drag to move' : '和奶蛙聊聊 · 按住拖动'
+          petNode.setAttribute('aria-label', petNode.title)
+        }
+        renderChat?.()
+        for (const notify of uiListeners) notify()
+      }
+
       function NaiwaControl(props) {
-        const t = props.t
+        hostEnglish = props.t('name') === 'Naiwa'
+        const language = React.useSyncExternalStore(subscribeUI, () => uiLanguage)
+        const t = language === 'zh' || language === 'en' ? key => DICTS[language][key] : props.t
         const send = props.send
         const bridge = props.skin
 
@@ -1001,6 +1072,15 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           ? t('status.unknown')
           : status.phase === 'pending'
             ? t('status.pending')
+            : english() && /[㐀-鿿]/.test(status.text) ? status.text
+              .replace(/档位已设为 /g, 'Persona set to ').replace(/语言已设为 /g, 'Reply language set to ')
+              .replace('奶蛙控制：', 'Naiwa settings: ').replace('档位=', 'Persona=')
+              .replace('常驻=', 'Resident=').replace('语言=', 'Reply language=').replace('咒语=', 'Spell=')
+              .replace(/持久化[：=]/g, 'Storage: ').replace('已写入', 'Saved to').replace('（空）', '(empty)')
+              .replace('无状态文件（config 默认）', 'Using defaults').replace('从 state/settings.json 载入', 'Loaded from state/settings.json')
+              .replace(/跟随用户|跟随/g, 'Auto').replace(/中文/g, 'Chinese').replace(/英文/g, 'English')
+              .replace(/关闭/g, 'Off').replace(/奶蛙/g, 'Naiwa').replace(/奶龙/g, 'Nailoong')
+              .replace(/=开/g, '=On').replace(/=关/g, '=Off').replace(/。/g, '. ').replace(/；/g, ' · ')
             : status.text
         const statusColor = status.phase === 'failed'
           ? 'var(--dsw-static-red-500)'
@@ -1102,34 +1182,11 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           })),
         )
 
-        const languageRow = h('div', { key: 'language', style: rowStyle },
-          h('span', { style: labelStyle }, t('label.language')),
-          h(Chip, {
-            key: 'auto',
-            label: t('language.auto'),
-            active: view.language === 'auto',
-            disabled: pending,
-            title: t('title.language'),
-            onClick: function () { run('/naiwa language auto', { language: 'auto' }) },
-          }),
-          h(Chip, {
-            key: 'zh',
-            label: t('language.zh'),
-            active: view.language === 'zh',
-            disabled: pending,
-            title: t('title.language'),
-            onClick: function () { run('/naiwa language zh', { language: 'zh' }) },
-          }),
-          h(Chip, {
-            key: 'en',
-            label: t('language.en'),
-            active: view.language === 'en',
-            disabled: pending,
-            title: t('title.language'),
-            onClick: function () { run('/naiwa language en', { language: 'en' }) },
-          }),
+        const uiRow = h('div', { key: 'ui-language', style: rowStyle },
+          h('span', {style:labelStyle}, t('label.ui')),
+          ...['zh','en'].map(code => h(Chip, {key:code, label:code === 'zh' ? '中文' : 'English',
+            active:code === (english() ? 'en' : 'zh'), onClick:() => chooseUI(code)})),
         )
-
         const skinRow = skinReady
           ? h('div', { key: 'skin', style: rowStyle },
               h('span', { style: labelStyle }, t('label.skin')),
@@ -1186,7 +1243,7 @@ if (globalThis.window && globalThis.window.__ModuleLoader__) {
           }, h('span', { style: mark }), t('name')),
           open === true
             ? h('div', { role: 'group', 'aria-label': t('aria.group'), style: panel },
-                strengthRow, languageRow, skinRow, soundRow, petRow, statusRow)
+                strengthRow, uiRow, skinRow, soundRow, petRow, statusRow)
             : null,
         )
       }

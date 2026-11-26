@@ -477,6 +477,21 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
   }
   assert.match(log.firstChild.textContent, /想跟我聊/)
   assert.deepEqual(questions, [])
+  function renderPanel() {
+    return component({t:key => key, sessionId:'demo', ask:async () => ({ok:true,text:'ok'})}).children[1]
+  }
+  function pickLanguage(code) {
+    renderPanel().children.find(row => row?.props.key === 'ui-language').children
+      .find(chip => chip.props.key === code).props.onClick()
+  }
+  pickLanguage('en')
+  assert.equal(renderPanel().children.some(row => row?.props.key === 'language'), false)
+  assert.equal(settings.get('naiwa-ism:ui-language'), 'en')
+  assert.equal(renderPanel().children.find(row => row?.props.key === 'strength').children[0].children[0], 'Persona')
+  assert.equal(actions.firstChild.textContent, 'Check progress')
+  pickLanguage('zh')
+  assert.equal(renderPanel().children.some(row => row?.props.key === 'language'), false)
+  assert.equal(actions.firstChild.textContent, '看进度')
   input.value = '你好'
   input.oninput()
   form.onsubmit({ preventDefault() {} })

@@ -375,7 +375,7 @@ test('T6 四类降级不抛（C3′/C6）：无 get/inject、无 theme、overrid
     }
     const plugin = makePlugin()
     assert.doesNotThrow(() => plugin.apply(bare))
-    assert.deepEqual(storage.calls.readKeys, ['naiwa-ism:pet'], 'only the independent pet setting is read')
+    assert.deepEqual(storage.calls.readKeys, ['naiwa-ism:ui-language', 'naiwa-ism:pet'], 'read interface and pet preferences')
     assert.equal(storage.calls.set, 0, 'no theme attach => no storage write')
     assert.equal(plugin.themeModel.bridge.available, false, 'chip must stay hidden without theme service')
     assert.equal(plugin.themeModel.skin.on, false)
