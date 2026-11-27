@@ -1,0 +1,45 @@
+{
+  "name": "@local/dsh-naiwa-ism",
+  "version": "1.6.0",
+  "private": true,
+  "description": "Naiwa-ism persona, narrative and art-direction tools for DeepSeek Harness, with a Web GUI control bar.",
+  "type": "module",
+  "exports": {
+    ".": "./plugin/index.js",
+    "./client": "./plugin/client.js",
+    "./locale/*.json": "./plugin/locale/*.json",
+    "./icon": "./plugin/icon.png",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "plugin/index.js",
+    "plugin/client.js",
+    "plugin/lib/*.js",
+    "plugin/cordis.patch.yml",
+    "plugin/locale/*.json",
+    "plugin/docs",
+    "plugin/icon.png",
+    "plugin/README.md",
+    "plugin/CHANGELOG.md",
+    "plugin/package.json",
+    "README.en.md",
+    "assets/naiwa.png",
+    "assets/naiwa-LICENSE.txt"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./plugin/cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
+    }
+  }
+}
