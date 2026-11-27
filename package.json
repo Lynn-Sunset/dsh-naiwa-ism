@@ -1,6 +1,7 @@
 {
   "name": "@local/dsh-naiwa-ism",
   "version": "1.6.0",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "description": "Naiwa-ism persona, narrative and art-direction tools for DeepSeek Harness, with a Web GUI control bar.",
   "type": "module",
@@ -21,6 +22,7 @@
     "plugin/icon.png",
     "plugin/README.md",
     "plugin/CHANGELOG.md",
+    "plugin/LICENSE",
     "plugin/package.json",
     "README.en.md",
     "assets/naiwa.png",

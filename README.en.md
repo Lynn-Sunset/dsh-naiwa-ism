@@ -44,3 +44,7 @@ Pet animations, background illustrations, and end-of-turn sounds work offline. F
 ## Tests
 
 From the repository root, run `node --test tests/*.test.mjs` with Node.js 24. The plugin has no runtime npm dependencies.
+
+## License
+
+You may use, modify and distribute the original plugin code for noncommercial purposes. Commercial use requires separate prior written permission. Third-party materials follow their respective terms. [Full license](./LICENSE)
