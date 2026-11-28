@@ -2,7 +2,7 @@
 
 [简体中文](./README.md) · English
 
-Give your DeepSeek Harness conversations Naiwa’s playful voice. The plugin includes tools for writing, art direction, and speech rhythm, plus a desktop pet you can chat with. The Web panel lets you choose a persona, switch the interface language, and control the theme and end-of-turn sounds.
+Give your DeepSeek Harness conversations Naiwa’s playful voice. The plugin includes tools for writing, art direction, and speech rhythm, plus a [desktop pet](#desktop-pet) you can chat with. The Web panel lets you choose a persona, switch the interface language, and control the theme and end-of-turn sounds.
 
 <img src="./assets/naiwa.png" alt="Three poses of Naiwa, from holding its belly to throwing its head back in laughter" width="720">
 
@@ -23,6 +23,27 @@ Supported DeepSeek Harness versions are `0.2.2-rc.5` on the default channel and 
 
 3. If the plugin manager returns `restart-required`, restart Harness. Refresh the Harness Web page and enter `/naiwa status` in a session to check the configuration.
 
+## Desktop pet
+
+Open **Naiwa → Pet** beside the message input and choose **Cycling**, **Ballet**, **Hopping**, or **Laughing**. In Cycling mode, Naiwa rides across the Harness page. Drag the pet to park it where you like, then click it to hear it laugh and open its own chat.
+
+<img src="./plugin/docs/pet-chat-en.png" width="464" alt="Naiwa on a bicycle below its chat window, with Check progress, Add image, and Send buttons">
+
+- **Chat about text or images.** Paste a screenshot and ask, “What does the button in the bottom right do?” The reply appears as it arrives. Each session keeps its chat history locally, so you can pick up after a refresh or restart. Follow-ups use the latest image, or you can select **Use this image** on an earlier one.
+- **Find out where a task got stuck.** Choose **Check progress** to see recent commands alongside their results and the last error from a failed step. Expand a step to read the original command and output. The chat also shows when Naiwa is reading the session log or looking something up on the web.
+- **Move the chat out of your way.** On desktop, drag anywhere in the dialog. On a touchscreen, swipe to scroll or press and hold to drag. Messages and code blocks have separate copy buttons.
+
+<details>
+<summary>Watch Naiwa hop off the bicycle, celebrate, and ride on</summary>
+
+<img src="./plugin/docs/pet-celebration-demo.webp" width="206" alt="Naiwa switches from cycling to a crouch, pushes off, tucks its knees, lands, and resumes cycling">
+
+The six-pose jump plays when a reply finishes in the main chat or the pet’s own chat, including after a progress update. Naiwa skips the animation when your system requests reduced motion.
+
+</details>
+
+Pet chat and progress updates use the current session’s DeepSeek model and require a connection to the model service. Pet animations, background illustrations, and end-of-turn sounds work offline.
+
 ## Usage
 
 To switch the panel and pet chat to English, open **奶蛙 → 界面语言 → English**. The browser remembers your choice. You can specify your preferred reply language in the conversation.
@@ -37,13 +58,7 @@ To switch the panel and pet chat to English, open **奶蛙 → 界面语言 → 
 | `naiwa_art` | Generate a color palette, art direction, and image prompts in Chinese and English. |
 | `naiwa_speak` | Plan the rhythm of each sentence, provide examples, and flag code and URLs to preserve. |
 
-In the **Naiwa** panel, choose **Cycling**, **Ballet**, **Hopping**, or **Laughing** to enable the pet. Click the pet to hear it laugh and open its chat bubble. You can send a message or choose **Check progress** to ask about recent activity in the selected session. Both use the session’s DeepSeek model and require a connection to the model service. Chat history is saved locally for each session and is available after a restart.
-
-**Check progress** pairs recent commands with their status and output. Expand a step to read its original log. After a refresh, you can browse earlier messages and images. Follow-ups use the latest image in the session, or you can choose **Use this image** on an older one. Drag anywhere in the dialog on desktop. On a touchscreen, swipe to scroll or press and hold to drag. Messages and code blocks have separate copy buttons.
-
-The pet shows when it is reading the session or searching the web, and replies appear as they arrive. Pet animations, background illustrations, and end-of-turn sounds work offline. For the full command and configuration reference, see the [plugin manual (Chinese)](./plugin/README.md).
-
-When a reply finishes in the main chat or the pet’s own chat, Naiwa crouches, pushes off, tucks its knees and lands before returning to the selected activity. This also happens when a progress reply finishes. The jump respects your system’s reduced-motion preference.
+For the full command and configuration reference, see the [plugin manual (Chinese)](./plugin/README.md).
 
 ## Tests
 
