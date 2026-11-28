@@ -39,7 +39,11 @@ To switch the panel and pet chat to English, open **奶蛙 → 界面语言 → 
 
 In the **Naiwa** panel, choose **Cycling**, **Ballet**, **Hopping**, or **Laughing** to enable the pet. Click the pet to hear it laugh and open its chat bubble. You can send a message or choose **Check progress** to ask about recent activity in the selected session. Both use the session’s DeepSeek model and require a connection to the model service. Chat history is saved locally for each session and is available after a restart.
 
-Pet animations, background illustrations, and end-of-turn sounds work offline. For the full command and configuration reference, see the [plugin manual (Chinese)](./plugin/README.md).
+**Check progress** pairs recent commands with their status and output. Expand a step to read its original log. After a refresh, you can browse earlier messages and images. Follow-ups use the latest image in the session, or you can choose **Use this image** on an older one. Drag anywhere in the dialog on desktop. On a touchscreen, swipe to scroll or press and hold to drag. Messages and code blocks have separate copy buttons.
+
+The pet shows when it is reading the session or searching the web, and replies appear as they arrive. Pet animations, background illustrations, and end-of-turn sounds work offline. For the full command and configuration reference, see the [plugin manual (Chinese)](./plugin/README.md).
+
+When a reply finishes in the main chat or the pet’s own chat, Naiwa crouches, pushes off, tucks its knees and lands before returning to the selected activity. This also happens when a progress reply finishes. The jump respects your system’s reduced-motion preference.
 
 ## Tests
 

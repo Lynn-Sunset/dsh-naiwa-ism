@@ -193,6 +193,51 @@ test('桌宠通过独立接口闲聊和查进度，失败也不发送会话命�
   assert.deepEqual(harness.executed, [])
 })
 
+test('流式聊天可读取跨字节的数据，断流后提示重试', async t => {
+  const props = mounted().entry.options.inject('s-1')
+  let frames = [{type:'status',stage:'reading'},{type:'delta',text:'奶蛙'},{type:'done',kind:'success',text:'奶蛙',seq:12}]
+  t.mock.method(globalThis,'fetch',async (_, init) => {
+    assert.equal(init.headers.Accept,'application/x-ndjson')
+    return new Response(new ReadableStream({start(controller) {
+      for (const byte of Buffer.from(frames.map(JSON.stringify).join('\n') + '\n')) controller.enqueue(Uint8Array.of(byte))
+      controller.close()
+    }}),{headers:{'Content-Type':'application/x-ndjson'}})
+  })
+  const events = []
+  const ask = () => props.ask('chat','你好',undefined,e => events.push(e))
+  assert.equal((await ask()).seq,12)
+  assert.deepEqual(events,frames.slice(0,2))
+  frames = frames.slice(0,2)
+  assert.deepEqual(await ask(),{ok:false,text:'发送中断，请重试。'})
+})
+
+test('普通回复正常结束即跳，目标完成与同一回合结束只跳一次', () => {
+  const completed = [], turns = []
+  let seq = 0, next, update
+  const source = {getSnapshot:() => ({entries:[], change:next}),subscribe(fn) { update = fn }}
+  const ctx = {get:() => ({binding:() => ({eventSource:source})})}
+  makePlugin().themeModel.sound.watch(ctx,'one',() => turns.push(seq),n => completed.push(n))
+  const append = (type,data) => {
+    next = {kind:'append',entries:[{event:{seq:++seq,type,data}}]}
+    update()
+  }
+  append('turn/end',{reason:{kind:'completed'}})
+  append('todo/write',{todos:[{status:'completed'}]})
+  append('turn/end',{reason:{kind:'error'}})
+  append('turn/start',{})
+  append('todo/write',{todos:[{status:'completed'}]})
+  append('turn/end',{reason:{kind:'completed'}})
+  append('goal/change',{operation:'complete'})
+  append('turn/end',{reason:{kind:'completed'}})
+  append('turn/start',{})
+  append('turn/end',{reason:{kind:'cancelled'}})
+  append('turn/start',{})
+  append('turn/end',{reason:{kind:'completed'}})
+  update()
+  assert.deepEqual(completed,[1,6,7,12])
+  assert.deepEqual(turns,[1,6,8,12])
+})
+
 test('图片从面板真实发送入口进入宿主附件服务', async t => {
   const {petChatRoute} = await import('../plugin/lib/pet-chat.js')
   const {mkdtempSync, rmSync} = await import('node:fs')
@@ -302,15 +347,15 @@ test('G6 package.json 的 dsh.client/exports/files 与磁盘一致', () => {
   }
 })
 
-test('G7 client.js 静态红线：classic script / 无 JSX / 无网络 / 无定时器（C10 授权的 head 样式注入除外）', () => {
+test('G7 classic script 只使用桌宠接口，定时器和事件监听限于框内手势', () => {
   const source = read('client.js')
   const banned = [
     /^\s*(import|export)\s/mu,
     /<[A-Z]/u,
     /fetch\((?!'api\/naiwa-ism\/pet-chat')/u,
     /setInterval/u,
-    /setTimeout/u,
-    /addEventListener/u,
+    /^(?!\s*drag\.timer = setTimeout\().*\bsetTimeout\(/mu,
+    /^(?!\s*box\.addEventListener\('(?:touchmove|click)').*\baddEventListener\(/mu,
     /window\.open/u,
   ]
   for (const pattern of banned) {
@@ -366,13 +411,16 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
     append(...children) { children.forEach(child => this.appendChild(child)) },
     replaceChildren(...children) { this.children = []; this.append(...children) },
     attrs: new Map(),
+    hasAttribute(k) { return this.attrs.has(k) },
     setAttribute(k,v) { this.attrs.set(k,v) },
     removeAttribute(k) { this.attrs.delete(k) },
     style: { setProperty() {} },
     getBoundingClientRect: () => ({ left: 0, top: 0 }),
     setPointerCapture() {},
+    addEventListener(type, fn) { this['on' + type] = fn },
     animate() { return this.clock = { cancel() {} } },
     appendChild(child) { child.parent = this; this.children.push(child) },
+    get parentElement() { return this.parent },
     get firstChild() { return this.children[0] },
     get lastChild() { return this.children.at(-1) },
     remove() { this.parent.children = this.parent.children.filter(child => child !== this) },
@@ -384,8 +432,9 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
     remove: name => backgroundChanges.push(name),
   }
   const played = []
-  let bundle, component, dispose
+  let bundle, component, dispose, celebrate, nextReply
   const questions = []
+  let longPress
   const react = {
     ...fakeReact,
     useSyncExternalStore: (_subscribe, snapshot) => snapshot(),
@@ -394,6 +443,9 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
   }
   const context = createContext({
     document: doc, innerWidth: 1000, innerHeight: 800,
+    getComputedStyle: () => ({transform:'matrix(-1, 0, 0, 1, 0, 0)'}),
+    setTimeout(fn) { longPress = fn; return 1 },
+    clearTimeout() { longPress = undefined },
     FileReader: class {
       readAsDataURL(file) { this.result = 'data:' + file.type + ';base64,aQ=='; this.onload() }
     },
@@ -414,8 +466,9 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
     component = harness.slots.registrations[0].component
   }
   function select(mode) {
-    const rendered = component({ t: key => key, sessionId: 'demo', ask: async (mode, question, image) => {
+    const rendered = component({ t: key => key, sessionId: 'demo', watchEnd: (_, done) => { celebrate = done }, ask: async (mode, question, image) => {
       questions.push(image ? {mode, question, image} : {mode, question})
+      if (nextReply) return nextReply
       return {ok: true, text: '**已完成**\n- 修复 `finalize`\n- 发布 **1.0.4**'}
     } })
     const row = rendered.children[1].children.find(child => child?.props.key === 'pet')
@@ -437,6 +490,21 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
     assert.equal(settings.get('naiwa-ism:pet'), mode)
   }
   assert.equal(animations.size, 4)
+  select('cycle')
+  const rider = doc.body.firstChild
+  const jump = rider.lastChild
+  assert.equal(jump.className, 'naiwa-jump')
+  const sheet = readFileSync(join(PLUGIN, 'docs', 'celebration-jump.webp'))
+  assert.equal(jump.style.backgroundImage, 'url("data:image/webp;base64,' + sheet.toString('base64') + '")')
+  celebrate(552)
+  assert.ok(rider.hasAttribute('data-celebrating'))
+  assert.equal(jump.style.transform, 'matrix(-1, 0, 0, 1, 0, 0)')
+  jump.onanimationend({animationName:'naiwa-jump-poses'})
+  assert.ok(rider.hasAttribute('data-celebrating'))
+  jump.onanimationend({animationName:'naiwa-jump-arc'})
+  assert.equal(rider.hasAttribute('data-celebrating'),false)
+  assert.equal(rider.attrs.get('data-action'),'cycle')
+  select('hop')
   const last = doc.body.firstChild.firstChild.firstChild.srcset
   const pet = doc.body.firstChild
   const pointer = { button: 0, isPrimary: true, pointerId: 1, clientX: 10, clientY: 12 }
@@ -453,7 +521,7 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
   const box = doc.body.children[1]
   const header = box.firstChild
   box.getBoundingClientRect = () => ({left: 60, top: 100, width: 420, height: 300})
-  const [, , log, form] = box.children
+  const [, picker, log, form] = box.children
   const [input, actions] = form.children
   for (const target of [header.firstChild, log.firstChild, input, actions.firstChild, header.lastChild, box]) {
     const grab = {...pointer, target, clientX:70, clientY:115, preventDefault() {}}
@@ -476,6 +544,21 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
     assert.equal(blocked,false)
   }
   assert.match(log.firstChild.textContent, /想跟我聊/)
+  const touch = {...pointer, target:log.firstChild, pointerType:'touch', preventDefault() {}}
+  box.onpointerdown(touch)
+  box.onpointermove({...touch, clientY:60})
+  assert.equal(longPress,undefined)
+  let prevented = false
+  const swipe = {cancelable:true,preventDefault() { prevented = true }}
+  box.ontouchmove(swipe)
+  assert.equal(prevented,false)
+  box.onpointerdown(touch)
+  longPress()
+  assert.equal(box.attrs.has('data-dragging'),true)
+  box.ontouchmove(swipe)
+  assert.equal(prevented,true)
+  box.onpointercancel(touch)
+  assert.equal(box.attrs.has('data-dragging'),false)
   assert.deepEqual(questions, [])
   function renderPanel() {
     return component({t:key => key, sessionId:'demo', ask:async () => ({ok:true,text:'ok'})}).children[1]
@@ -494,8 +577,13 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
   assert.equal(actions.firstChild.textContent, '看进度')
   input.value = '你好'
   input.oninput()
+  assert.ok(pet.hasAttribute('data-reacting'))
   form.onsubmit({ preventDefault() {} })
+  assert.equal(pet.hasAttribute('data-celebrating'),false)
   await new Promise(resolve => setImmediate(resolve))
+  assert.ok(pet.hasAttribute('data-celebrating'))
+  assert.equal(pet.hasAttribute('data-reacting'),false)
+  jump.onanimationend({animationName:'naiwa-jump-arc'})
   const [speaker, title, list] = log.lastChild.children
   assert.equal(box.style.left, '300px')
   assert.equal(box.style.top, '230px')
@@ -511,6 +599,8 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
   actions.firstChild.onclick()
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(questions[1].mode, 'progress')
+  assert.ok(pet.hasAttribute('data-celebrating'))
+  jump.onanimationend({animationName:'naiwa-jump-arc'})
   const file = {name:'screen.png', type:'image/png'}
   input.onpaste({clipboardData:{files:[file]}, preventDefault() {}})
   assert.match(form.children[2].textContent, /screen.png/)
@@ -518,11 +608,24 @@ test('桌宠可从面板切换三种动作，恢复上次选择，并在关闭�
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(JSON.parse(JSON.stringify(questions[2])), {mode:'chat',question:'',image:{mediaType:'image/png',data:'aQ==',name:'screen.png'}})
   assert.equal(form.children[2].hidden,true)
-  assert.equal(pet.attrs.has('data-reacting'), true)
-  assert.notEqual(pet.firstChild.firstChild.srcset, last)
+  assert.ok(pet.hasAttribute('data-celebrating'))
+  jump.onanimationend({animationName:'naiwa-jump-arc'})
   assert.equal(settings.get('naiwa-ism:pet'), 'hop')
-  pet.firstChild.clock.onfinish()
   assert.equal(pet.firstChild.firstChild.srcset, last)
+  nextReply = {ok:false,text:'发送中断，请重试。'}
+  input.value = '重试'
+  form.onsubmit({preventDefault() {}})
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(pet.hasAttribute('data-celebrating'),false)
+  let finish
+  nextReply = new Promise(resolve => { finish = resolve })
+  form.onsubmit({preventDefault() {}})
+  component({t:key => key, sessionId:'other', ask:async () => ({ok:true,text:'ok'})})
+  picker.value = 'other'
+  picker.onchange()
+  finish({ok:true,text:'上一会话的回复'})
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(pet.hasAttribute('data-celebrating'),false)
   pet.onclick({ detail: 0 })
   select('cycle')
   assert.equal(pet.firstChild.clock.onfinish, null)

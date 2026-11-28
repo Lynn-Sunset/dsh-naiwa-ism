@@ -209,3 +209,122 @@ test('实时查询只执行声明的联网工具，拒绝模型伪造的写文�
   assert.equal(reply.text,'深圳多云')
   assert.deepEqual(searches,[{query:'深圳今日天气',maxResults:5,llmProvider:'deepseek'}])
 })
+
+function petApi(ctx, file, events = []) {
+  const route = petChatRoute({...ctx, sessionController:{resolveAgent:async id => ({agent:{
+    session:{id, snapshotEvents:() => events}, model:{current:() => ({provider:'deepseek',model:'vision'})},
+  }})}}, file)
+  const url = 'http://localhost' + route.path
+  const post = (body, stream) => route.fetch(new Request(url, {method:'POST', headers:{
+    'Content-Type':'application/json', Accept:stream ? 'application/x-ndjson' : 'application/json',
+  }, body:JSON.stringify({sessionId:'a', ...body})}))
+  return {post, json:async body => (await post(body)).json(),
+    preview:(seq, id) => route.fetch(new Request(url + '?sessionId=' + id + '&seq=' + seq))}
+}
+
+test('进度配对并行调用，保留末尾错误，按事件号读取完整原文', async t => {
+  const events = []
+  const call = (id, cmd) => events.push({seq:events.length, type:'tool/call',data:{
+    turn:2, callId:id, name:'bash', arguments:JSON.stringify({command:cmd})}})
+  const result = (id, text) => events.push({seq:events.length, type:'tool/result',data:{turn:2,
+    message:{toolCallId:id, content:[{type:'text', text}]}}})
+  call('build', 'npm run build')
+  call('publish', 'npm publish')
+  const output = 'packaging\n' + 'a'.repeat(1600) + 'middle-of-raw-log' + 'b'.repeat(1600) + '\nMissing LICENSE\n[exit code: 1]'
+  result('publish', output)
+  result('build', 'ok')
+  call('watch', 'watch')
+  let modelInput
+  const api = petApi({llm:{async *stream({messages}) {
+    modelInput = messages.at(-1).content[0].text
+    yield {type:'text-delta',text:'发布失败。'}
+    yield {type:'finish',reason:{kind:'stop'}}
+  }}}, temporaryMemory(t), events)
+  const answer = await api.json({mode:'progress', question:'进度？'})
+  assert.equal(answer.kind,'success')
+  assert.deepEqual(answer.evidence.map(s => [s.command,s.status,s.callSeq,s.resultSeq]), [
+    ['watch','running',4,undefined], ['npm run build','completed',0,3], ['npm publish','failed',1,2],
+  ])
+  assert.match(modelInput,/Missing LICENSE/)
+  assert.doesNotMatch(modelInput,/middle-of-raw-log/)
+  assert.deepEqual((await api.json({mode:'history'})).turns[0].evidence,answer.evidence)
+  assert.equal((await api.json({mode:'log', seq:2})).text,output)
+  assert.equal((await api.json({mode:'log', seq:1})).text,'{"command":"npm publish"}')
+  assert.equal((await api.post({mode:'log',seq:12})).status,404)
+})
+
+test('旧库分页、重启后预览与引用原图、跨会话隔离，图片只接收一次', async t => {
+  const file = temporaryMemory(t)
+  const legacy = new DatabaseSync(file)
+  legacy.exec(`CREATE TABLE turns(seq INTEGER PRIMARY KEY, session TEXT, question TEXT, reply TEXT,
+    model TEXT, provider TEXT, message_id TEXT)`)
+  for (let i = 0; i < 22; i++) legacy.prepare('INSERT INTO turns VALUES(NULL, ?, ?, ?, ?, ?, ?)')
+    .run('a', 'old ' + i, 'old reply', 'vision', 'deepseek', String(i))
+  legacy.close()
+  let admissions = 0, lastParts
+  const store = {
+    async admitPromptContent([image]) {
+      admissions++
+      return [{type:'image',attachment:{attachmentId:image.name, name:image.name, mediaType:image.mediaType}}]
+    },
+    async readImage(ref) { return {data:Buffer.from(ref.name)} },
+  }
+  const ctx = {get:key => key === 'attachments' ? store : undefined, llm:{async *stream({messages}) {
+    lastParts = messages.at(-1).content
+    yield {type:'text-delta', text:'收到'}
+    yield {type:'finish',reason:{kind:'stop'}}
+  }}}
+  let api = petApi(ctx,file)
+  const send = name => api.json({mode:'chat',question:'',image:{name,mediaType:'image/png',data:'aQ=='}})
+  const first = await send('first.png')
+  const second = await send('second.png')
+  api = petApi(ctx,file)
+  const page = await api.json({mode:'history'})
+  assert.equal(page.turns.length,20)
+  assert.equal(page.turns.at(-2).imageName,'first.png')
+  assert.equal(page.turns.at(-1).seq,second.seq)
+  const older = await api.json({mode:'history',before:page.before})
+  assert.deepEqual(older.turns.map(row => row.question), ['old 0','old 1','old 2','old 3'])
+  assert.equal(older.before,null)
+  assert.equal(await (await api.preview(first.seq,'a')).text(),'first.png')
+  assert.equal((await api.preview(first.seq,'b')).status,404)
+  assert.deepEqual((await api.json({sessionId:'b',mode:'history'})).turns,[])
+  await api.json({mode:'chat',question:'右下角是什么？'})
+  assert.equal(lastParts.at(-1).attachment.attachmentId,'second.png')
+  await api.json({mode:'chat',question:'这张呢？',imageSeq:first.seq})
+  assert.equal(lastParts.at(-1).attachment.attachmentId,'first.png')
+  assert.equal((await api.json({sessionId:'b',mode:'chat',question:'?',imageSeq:first.seq})).kind,'error')
+  assert.equal(admissions,2)
+})
+
+test('流式返回真实联网阶段和首段文字，完成前不写入半条回复', async t => {
+  let release, round = 0
+  const gate = new Promise(resolve => { release = resolve })
+  const web = {searchReady:async () => true, search:async () => ({content:'ok'})}
+  const api = petApi({get:key => key === 'web' ? web : undefined, llm:{async *stream() {
+    if (++round === 1) {
+      yield {type:'block-end',block:{type:'tool-call',id:'w',name:'web_search',arguments:'{"query":"天气"}'}}
+      yield {type:'finish',reason:{kind:'tool-calls'}}
+    } else {
+      yield {type:'text-delta',text:'深圳'}
+      await gate
+      yield {type:'text-delta',text:'晴'}
+      yield {type:'finish',reason:{kind:'stop'}}
+    }
+  }}}, temporaryMemory(t))
+  const response = await api.post({mode:'chat',question:'天气'}, true)
+  const reader = response.body.getReader(), seen = []
+  while (!seen.some(e => e.type === 'delta')) {
+    const chunk = await reader.read()
+    assert.equal(chunk.done,false)
+    seen.push(...new TextDecoder().decode(chunk.value).trim().split('\n').map(JSON.parse))
+  }
+  assert.deepEqual(seen.filter(e => e.type === 'status').map(e => e.stage),['reading','thinking','web_search','thinking'])
+  assert.equal(seen.at(-1).text,'深圳')
+  assert.equal((await api.json({mode:'history'})).turns.length,0)
+  release()
+  const rest = []
+  for (let chunk; !(chunk = await reader.read()).done;) rest.push(JSON.parse(new TextDecoder().decode(chunk.value)))
+  assert.equal(rest.at(-1).text,'深圳晴')
+  assert.equal((await api.json({mode:'history'})).turns.length,1)
+})
